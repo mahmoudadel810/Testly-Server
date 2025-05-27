@@ -118,7 +118,7 @@ const startServer = async () =>
     {
       console.log(`server is running on port ${port}`);
       logger.info('Server started successfully', { port, baseUrl: BASE_URL });
-      console.log(`Swagger documentation available at: http://localhost:${port}/${BASE_URL}/docs`);
+      console.log(`Swagger documentation available at: http://localhost:${port}/${BASE_URL}/docs`); 
     });
 
     // Graceful shutdown handlingf 
