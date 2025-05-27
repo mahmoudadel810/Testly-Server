@@ -20,7 +20,7 @@ config({ path: path.resolve('config/.env') });
 
 const port = process.env.PORT || 3000;
 const app = express();
-const BASE_URL = process.env.BASE_URL; // No slashes at either end
+const BASE_URL = process.env.BASE_URL || 'api';
 
 //=============================================================
 
@@ -37,8 +37,8 @@ const initializeRedis = async () =>
     // Application continues without Redis
   }
 };
-
-// Create Redis-based rate limiter
+ 
+// Create Redis-based rate limiter 
 const limiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP/user to 100 requests per windowMs
@@ -96,7 +96,7 @@ app.use(`/${BASE_URL}/exam`, AllRouters.examRouter);
 app.use(`/${BASE_URL}/attempt`, AllRouters.attemptRouter);
 app.use(`/${BASE_URL}/contact`, AllRouters.contactRouter);
 console.log(BASE_URL);
- 
+
 //call al swagger   
 swaggerDocs(app, BASE_URL);
 
@@ -110,32 +110,32 @@ const startServer = async () =>
 {
   try
   {
-    // Initialize Redis first
     await initializeRedis();
 
-    // Start the server
-    app.listen(port, () =>
+    // Only start server and add signal handlers in local/dev
+    if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL)
     {
-      console.log(`server is running on port ${port}`);
-      logger.info('Server started successfully', { port, baseUrl: BASE_URL });
-      console.log(`Swagger documentation available at: http://localhost:${port}/${BASE_URL}/docs`); 
-    });
+      app.listen(port, () =>
+      {
+        console.log(`server is running on port ${port}`);
+        logger.info('Server started successfully', { port, baseUrl: BASE_URL });
+        console.log(`Swagger documentation available at: http://localhost:${port}/${BASE_URL}/docs`);
+      });
 
-    // Graceful shutdown handlingf 
-    process.on('SIGTERM', async () =>
-    {
-      logger.info('SIGTERM received, shutting down gracefully');
-      await redisManager.disconnect();
-      process.exit(0);
-    });
+      process.on('SIGTERM', async () =>
+      {
+        logger.info('SIGTERM received, shutting down gracefully');
+        await redisManager.disconnect();
+        process.exit(0);
+      });
 
-    process.on('SIGINT', async () =>
-    {
-      logger.info('SIGINT received, shutting down gracefully');
-      await redisManager.disconnect();
-      process.exit(0);
-    });
-
+      process.on('SIGINT', async () =>
+      {
+        logger.info('SIGINT received, shutting down gracefully');
+        await redisManager.disconnect();
+        process.exit(0);
+      });
+    }
   } catch (error)
   {
     logger.error('Failed to start server', { error: error.message });
@@ -143,7 +143,11 @@ const startServer = async () =>
   }
 };
 
-// Start the application
-startServer();
+// Only call startServer in local/dev
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL)
+{
+  startServer();
+}
 
+// For Vercel: export the app
 export default app;
