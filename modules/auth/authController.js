@@ -485,7 +485,16 @@ export const resetPassword = asyncHandler(async (req, res, next) =>
     const emailed = await sendEmail({
         to: email,
         subject: 'Reset your Password',
-        message: `Your password reset code is: ${code}`
+        message: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 20px auto; padding: 30px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h2 style="color: #dc3545; text-align: center; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 1px solid #eee;">Password Reset Request</h2>
+        <p style="font-size: 16px; line-height: 1.6; color: #333; margin-bottom: 15px;">Hello,</p>
+        <p style="font-size: 16px; line-height: 1.6; color: #333; margin-bottom: 25px;">We received a request to reset your password for your Testly account. Please use the following code to complete the reset process:</p>
+               <div style="text-align: center; margin: 30px 0; padding: 15px 25px; background-color: #f8f9fa; border: 1px dashed #ced4da; border-radius: 5px;">
+           <p style="font-size: 24px; font-weight: bold; color: #dc3545; margin: 0;">${code}</p>
+             </div>
+        <p style="font-size: 14px; color: #777; margin-top: 30px; text-align: center;">If you did not request a password reset, please ignore this email.</p>
+        <p style="font-size: 12px; color: #aaa; margin-top: 25px; text-align: center;">&copy; ${new Date().getFullYear()} Testly. All rights reserved.</p>
+      </div>`
     });
 
     if (!emailed)
