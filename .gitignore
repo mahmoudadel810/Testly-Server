@@ -1,0 +1,14 @@
+# Dependency directories
+node_modules/
+
+# Database dump files
+dump.rdb
+
+# Log files
+logs/
+
+# OS-specific files
+.DS_Store
+
+# Environment variables
+.env 
