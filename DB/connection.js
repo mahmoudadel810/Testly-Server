@@ -11,7 +11,7 @@ const connectionDB = async () =>
 
     const options = {
       serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
+      socketTimeoutMS: 45000, 
     };
 
     logger.info('Attempting to connect to MongoDB...');
