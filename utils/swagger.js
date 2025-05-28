@@ -10,7 +10,7 @@ const __dirname = dirname(__filename);
 const swaggerOptions = {
     definition: {
         openapi: '3.0.0',
-        info: {
+        info: { 
             title: 'Testly API Documentation',
             version: '1.0.0',
             description: 'Documentation for the Testly Quiz Application API',

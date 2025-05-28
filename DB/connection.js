@@ -5,35 +5,29 @@ const connectionDB = async () =>
 {
   try
   {
+    // Debug: Log the actual URI being used
+    console.log('Raw MONGODB_URI:', JSON.stringify(process.env.MONGODB_URI));
+    console.log('URI length:', process.env.MONGODB_URI?.length);
+
     const options = {
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
     };
 
     logger.info('Attempting to connect to MongoDB...');
     await mongoose.connect(process.env.MONGODB_URI, options);
     logger.info("DB Connected successfully!");
 
-    // Log connection state changes
-    mongoose.connection.on('disconnected', () =>
-    {
-      logger.error('MongoDB disconnected');
-    });
-
-    mongoose.connection.on('error', (err) =>
-    {
-      logger.error('MongoDB connection error:', err);
-    });
-
+    // ... rest of your code
   } catch (err)
   {
     logger.error("DB Connection Failed!", {
       error: err.message,
       code: err.code,
       name: err.name,
-      stack: err.stack
+      rawUri: process.env.MONGODB_URI ? 'URI exists' : 'URI missing'
     });
-    // In production, we might want to retry the connection
+
     if (process.env.NODE_ENV === 'production')
     {
       logger.info('Retrying connection in 5 seconds...');
