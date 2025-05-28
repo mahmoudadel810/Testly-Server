@@ -10,10 +10,15 @@ const connectionDB = async () =>
     console.log('URI length:', process.env.MONGODB_URI?.length);
 
     const options = {
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000, 
+      serverSelectionTimeoutMS: 30000, // Increase timeout
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10, // Maintain up to 10 socket connections
+      serverApi: {
+        version: '1',
+        strict: true,
+        deprecationErrors: true,
+      }
     };
-
     logger.info('Attempting to connect to MongoDB...');
     await mongoose.connect(process.env.MONGODB_URI, options);
     logger.info("DB Connected successfully!");
