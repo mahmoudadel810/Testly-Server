@@ -24,7 +24,16 @@ class RedisManager
             }
             this.connectionAttempted = true;
 
-            logger.info('Attempting to connect to Redis...');
+            logger.info('Attempting to connect to Redis...', {
+                host: process.env.REDIS_HOST,
+                url: process.env.REDIS_URL ? 'URL provided' : 'No URL provided'
+            });
+
+            if (!process.env.REDIS_URL)
+            {
+                logger.warn('No REDIS_URL provided, skipping Redis connection');
+                return;
+            }
 
             this.client = new Redis(process.env.REDIS_URL, {
                 tls: {
@@ -34,7 +43,16 @@ class RedisManager
                 },
                 socket: {
                     keepAlive: 5000, // Prevent ECONNRESET
-                    tls: true // Explicit TLS declaration
+                    tls: true, // Explicit TLS declaration
+                    reconnectStrategy: (retries) =>
+                    {
+                        if (retries > 3)
+                        {
+                            logger.error('Redis max retries reached, giving up after 3 retries');
+                            return null; // Stop retrying
+                        }
+                        return Math.min(retries * 1000, 3000); // Exponential backoff
+                    }
                 },
                 connectTimeout: 10000,
                 commandTimeout: 5000,
