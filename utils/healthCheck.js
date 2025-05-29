@@ -112,7 +112,8 @@ export const checkSystemHealth = async () =>
                 server: {
                     status: 'running',
                     uptime: `${process.uptime()}s`,
-                    memory: process.memoryUsage()
+                    memory: process.memoryUsage(),
+                    baseUrl: process.env.BASE_URL || 'api'
                 }
             }
         };
