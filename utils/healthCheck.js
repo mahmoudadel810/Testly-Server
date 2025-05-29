@@ -118,7 +118,7 @@ export const checkSystemHealth = async () =>
             }
         };
     }
-    catch (error)
+    catch (error) 
     {
         return handleHealthError(error, 'System');
     }
