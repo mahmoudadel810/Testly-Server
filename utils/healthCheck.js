@@ -2,6 +2,13 @@ import mongoose from 'mongoose';
 import redisManager from './redis.js';
 import logger from './logger.js';
 
+const statusMap = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+};
+
 /**
  * Performs a health check on the database connection
  * @returns {Promise<Object>} Health status of the database
@@ -11,19 +18,11 @@ export const checkDatabaseHealth = async () =>
     try
     {
         const status = mongoose.connection.readyState;
-        const statusMap = {
-            0: 'disconnected',
-            1: 'connected',
-            2: 'connecting',
-            3: 'disconnecting'
-        };
-
-        // If connected, perform a simple ping operation
         let latency = null;
+
         if (status === 1)
         {
             const start = Date.now();
-            // Simple ping-like operation
             await mongoose.connection.db.admin().ping();
             latency = `${Date.now() - start}ms`;
         }
@@ -51,7 +50,6 @@ export const checkRedisHealth = async () =>
 {
     try
     {
-        // Use the built-in health check method from RedisManager
         return await redisManager.healthCheck();
     } catch (error)
     {

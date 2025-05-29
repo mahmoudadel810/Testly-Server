@@ -1,56 +1,50 @@
 import mongoose from 'mongoose';
 import { AppError } from '../utils/errorHandling.js';
+import logger from '../utils/logger.js';
 
 
 // Serverless connection caching
 let cachedConnection = null;
 
-async function connectDB()
+const connectDB = async () =>
 {
-  // Check if we already have a connection and it's still valid
-  if (cachedConnection && mongoose.connection.readyState === 1)
-  {
-    console.log('Using cached MongoDB connection');
-    return cachedConnection;
-  }
-
-  // Validate environment variable
-  if (!process.env.MONGODB_URI)
-  {
-    throw new AppError("MONGODB_URI environment variable not set");
-  }
-
   try
   {
-    // Connection options optimized for Vercel serverless
-    const options = {
+    if (cachedConnection && mongoose.connection.readyState === 1)
+    {
+      console.log('Using cached MongoDB connection');
+      return cachedConnection;
+    }
+
+    if (!process.env.MONGODB_URI)
+    {
+      logger.error('MongoDB URI not provided');
+      throw new Error('MONGODB_URI environment variable not set');
+    }
+
+    cachedConnection = await mongoose.connect(process.env.MONGODB_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // Fail fast if no primary available
-      maxPoolSize: 10, // For serverless connection pooling
-      socketTimeoutMS: 45000, // Close sockets after 45s inactivity
+      serverSelectionTimeoutMS: 5000,
+      maxPoolSize: 10,
+      socketTimeoutMS: 45000,
       serverApi: {
-        version: '1', // Explicitly set API version
+        version: '1',
         strict: true,
         deprecationErrors: true,
       },
-      // Key settings for serverless environments
-      bufferCommands: false, // Don't buffer commands when disconnected
-      autoIndex: false, // Don't build indexes automatically in production
-    };
+      bufferCommands: false,
+      autoIndex: false,
+    });
 
-    // Establish connection
-    const connection = await mongoose.connect(process.env.MONGODB_URI, options);
-
-    console.log(`MongoDB Connected: ${connection.connection.host}`);
-    cachedConnection = connection;
-    return connection;
+    logger.info(`MongoDB Connected: ${cachedConnection.connection.host}`);
+    return cachedConnection;
   } catch (error)
   {
-    console.error(`DB Connection Error: ${error.message}`);
-    // Rethrow to prevent server from starting without DB
-    throw error;
+    logger.error('MongoDB Connection Error:', error.message);
+    cachedConnection = null;
+    throw new Error(`Failed to connect to MongoDB: ${error.message}`);
   }
-}
+};
 
 export default connectDB;

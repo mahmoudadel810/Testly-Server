@@ -15,25 +15,21 @@ class RedisManager
      */
     async connect()
     {
+        if (this.connectionAttempted) return;
+        this.connectionAttempted = true;
+
+        if (!process.env.REDIS_URL)
+        {
+            logger.warn('No REDIS_URL provided');
+            return;
+        }
+
         try
         {
-            // Don't try to connect multiple times
-            if (this.connectionAttempted)
-            {
-                return;
-            }
-            this.connectionAttempted = true;
-
             logger.info('Attempting to connect to Redis...', {
                 host: process.env.REDIS_HOST,
                 url: process.env.REDIS_URL ? 'URL provided' : 'No URL provided'
             });
-
-            if (!process.env.REDIS_URL)
-            {
-                logger.warn('No REDIS_URL provided, skipping Redis connection');
-                return;
-            }
 
             this.client = new Redis(process.env.REDIS_URL, {
                 tls: {
@@ -70,16 +66,10 @@ class RedisManager
             });
 
             // When connection breaks
-            this.client.on('error', (err) =>
+            this.client.on('error', () =>
             {
-                logger.error('Redis connection error:', err.message);
+                logger.error('Redis connection error');
                 this.isConnected = false;
-
-                // Don't try to reconnect endlessly
-                if (err.code === 'ECONNRESET')
-                {
-                    logger.warn('Connection reset - will try to reconnect...');
-                }
             });
 
             // When connection closes
@@ -117,9 +107,7 @@ class RedisManager
      */
     isReady()
     {
-        return this.isConnected &&
-            this.client !== null &&
-            this.client.status === 'ready';
+        return this.isConnected && this.client?.status === 'ready';
     }
 
     /**
@@ -128,12 +116,7 @@ class RedisManager
      */
     getClient()
     {
-        // Safety check - return null if not ready
-        if (!this.isReady())
-        {
-            return null;
-        }
-        return this.client;
+        return this.isReady() ? this.client : null;
     }
 
     /**
@@ -149,11 +132,11 @@ class RedisManager
                 logger.info('Redis disconnected gracefully');
             } catch (error)
             {
-                logger.error('Error disconnecting from Redis:', error.message);
+                logger.error('Redis disconnect error:', error.message);
             }
+            this.client = null;
+            this.isConnected = false;
         }
-        this.client = null;
-        this.isConnected = false;
     }
 
     /**
@@ -194,8 +177,7 @@ class RedisManager
         try
         {
             const cached = await this.getFromRedis(key);
-            if (cached) return cached;
-            return fallbackFn(); // Fetch from DB if cache misses
+            return cached || fallbackFn();
         } catch (error)
         {
             logger.error('Cache failed, falling back to DB', error);
@@ -205,6 +187,4 @@ class RedisManager
 }
 
 // Create ONE instance that the whole app uses
-const redisManager = new RedisManager();
-
-export default redisManager;
+export default new RedisManager();
