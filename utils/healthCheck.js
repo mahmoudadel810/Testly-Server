@@ -9,43 +9,32 @@ const statusMap = {
     3: 'disconnecting'
 };
 
-/**
- * Performs a health check on the database connection
- * @returns {Promise<Object>} Health status of the database
- */
+const handleHealthError = (error, service) =>
+{
+    logger.error(`${service} health check failed`, { error: error.message });
+    return { status: 'error', message: error.message };
+};
+
 export const checkDatabaseHealth = async () =>
 {
     try
     {
         const status = mongoose.connection.readyState;
-        let latency = null;
-
-        if (status === 1)
-        {
-            const start = Date.now();
-            await mongoose.connection.db.admin().ping();
-            latency = `${Date.now() - start}ms`;
-        }
+        const latency = status === 1 ? await measureLatency() : null;
 
         return {
             status: statusMap[status] || 'unknown',
             latency,
             message: status === 1 ? 'Database is healthy' : `Database status: ${statusMap[status]}`
         };
-    } catch (error)
+    }
+    catch (error)
     {
-        logger.error('Database health check failed', { error: error.message });
-        return {
-            status: 'error',
-            message: error.message
-        };
+        return handleHealthError(error, 'Database');
     }
 };
 
-/**
- * Performs a health check on the Redis connection
- * @returns {Promise<Object>} Health status of Redis
- */
+
 export const checkRedisHealth = async () =>
 {
     try
@@ -53,11 +42,7 @@ export const checkRedisHealth = async () =>
         return await redisManager.healthCheck();
     } catch (error)
     {
-        logger.error('Redis health check failed', { error: error.message });
-        return {
-            status: 'error',
-            message: error.message
-        };
+        return handleHealthError(error, 'Redis');
     }
 };
 
@@ -89,39 +74,53 @@ export const checkEnvironmentConfig = () =>
     };
 };
 
+const measureLatency = async () => //ping the database to measure latency
+{
+    const start = Date.now();
+    await mongoose.connection.db.admin().ping();
+    return `${Date.now() - start}ms`;
+};
+
 /**
  * Comprehensive health check for all services
  * @returns {Promise<Object>} Health status of all services
  */
 export const checkSystemHealth = async () =>
 {
-    const [dbHealth, redisHealth] = await Promise.all([
-        checkDatabaseHealth(),
-        redisManager.healthCheck()
-    ]);
+    try
+    {
+        const [dbHealth, redisHealth] = await Promise.all([
+            checkDatabaseHealth(),
+            redisManager.healthCheck()
+        ]);
 
-    const envConfig = checkEnvironmentConfig();
+        const envConfig = checkEnvironmentConfig();
 
-    const isHealthy = dbHealth.status === 'connected' &&
-        (redisHealth.status === 'healthy' || redisHealth.status === 'disconnected') &&
-        envConfig.status === 'complete';
+        const isHealthy = dbHealth.status === 'connected' &&
+            (redisHealth.status === 'healthy' || redisHealth.status === 'disconnected') &&
+            envConfig.status === 'complete';
 
-    logger.info('Health Check - isHealthy calculated as:', isHealthy);
+        logger.info('Health Check - isHealthy calculated as:', isHealthy);
 
-    return {
-        status: isHealthy ? 'healthy' : 'degraded',
-        timestamp: new Date().toISOString(),
-        services: {
-            database: dbHealth,
-            redis: redisHealth,
-            environment: envConfig,
-            server: {
-                status: 'running',
-                uptime: `${process.uptime()}s`,
-                memory: process.memoryUsage()
+        return {
+            status: isHealthy ? 'healthy' : 'degraded',
+            timestamp: new Date().toISOString(),
+            services: {
+                database: dbHealth,
+                redis: redisHealth,
+                environment: envConfig,
+                server: {
+                    status: 'running',
+                    uptime: `${process.uptime()}s`,
+                    memory: process.memoryUsage()
+                }
             }
-        }
-    };
+        };
+    }
+    catch (error)
+    {
+        return handleHealthError(error, 'System');
+    }
 };
 
 export default {
