@@ -1,6 +1,6 @@
 import express from "express";
 import { json } from "express";
-import connectionDB from './DB/connection.js';
+import dbConnect from './DB/connection.js'; // Renamed for clarity
 import cors from "cors";
 import * as AllRouters from "./modules/indexRouters.js";
 import swaggerDocs from './utils/swagger.js';
@@ -17,13 +17,11 @@ import logger from './utils/logger.js';
 config({ path: path.resolve('config/.env') });
 
 //==============================================================
-
 const port = process.env.PORT || 3000;
 const app = express();
 const BASE_URL = process.env.BASE_URL || 'api';
 
 //=============================================================
-
 // Initialize Redis connection
 const initializeRedis = async () =>
 {
@@ -34,10 +32,9 @@ const initializeRedis = async () =>
   } catch (error)
   {
     logger.error('Redis initialization failed', { error: error.message });
-    // Application continues without Redis
   }
 };
- 
+
 // Create Redis-based rate limiter 
 const limiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -47,17 +44,14 @@ const limiter = createRateLimiter({
 });
 
 //=============================================================
-
-connectionDB();
-app.use(cors()); // Enables Cross-Origin Resource Sharing
+app.use(cors());
 app.use(json());
-app.use(compression()); // Compresses response bodies
-app.use(helmet()); // Secures the app by setting various HTTP headers
+app.use(compression());
+app.use(helmet());
 app.use(morgan('dev'));
-app.use(limiter.middleware()); // Redis-based rate limiting
+app.use(limiter.middleware());
 
 //=============================================================
-
 // Test routes
 app.get('/', (req, res) =>
 {
@@ -71,12 +65,9 @@ app.get('/health', async (req, res) =>
   {
     const { checkSystemHealth } = await import('./utils/healthCheck.js');
     const healthStatus = await checkSystemHealth();
-
-    // Return 200 if healthy, 503 if degraded
     const statusCode = healthStatus.status === 'healthy' ? 200 : 503;
     res.status(statusCode).json(healthStatus);
-  }
-  catch (error)
+  } catch (error)
   {
     logger.error('Health check failed', { error: error.message });
     res.status(503).json({
@@ -87,55 +78,53 @@ app.get('/health', async (req, res) =>
   }
 });
 
-
-
 // Main Routers  
 app.use(`/${BASE_URL}/admin`, AllRouters.adminRouter);
 app.use(`/${BASE_URL}/auth`, AllRouters.authRouter);
 app.use(`/${BASE_URL}/exam`, AllRouters.examRouter);
 app.use(`/${BASE_URL}/attempt`, AllRouters.attemptRouter);
 app.use(`/${BASE_URL}/contact`, AllRouters.contactRouter);
-console.log(BASE_URL);
 
-//call al swagger   
+// Swagger documentation
 swaggerDocs(app, BASE_URL);
 
-// Error handling middleware, after all routes to detect their all errors
+// Error handling
 app.use(notFound);
 app.use(errorHandler);
 
-//======================RUN SERVER =======================================
-
+//====================== SERVER STARTUP =======================================
 const startServer = async () =>
 {
   try
   {
+    // Initialize database and Redis
+    await dbConnect(); // Use the new connection handler
     await initializeRedis();
 
-    // Only start server and add signal handlers in local/dev
-    if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL)
+    // Start server
+    const server = app.listen(port, () =>
     {
-      app.listen(port, () =>
-      {
-        console.log(`server is running on port ${port}`);
-        logger.info('Server started successfully', { port, baseUrl: BASE_URL });
-        console.log(`Swagger documentation available at: http://localhost:${port}/${BASE_URL}/docs`);
-      });
+      console.log(`Server running on port ${port}`);
+      logger.info('Server started', { port, baseUrl: BASE_URL });
+      console.log(`Swagger: http://localhost:${port}/${BASE_URL}/docs`);
+    });
 
-      process.on('SIGTERM', async () =>
+    // Graceful shutdown 
+    const shutdown = async () =>
+    {
+      logger.info('Shutting down gracefully');
+      await redisManager.disconnect();
+      server.close(() =>
       {
-        logger.info('SIGTERM received, shutting down gracefully');
-        await redisManager.disconnect();
+        logger.info('Server closed');
         process.exit(0);
       });
+    };
 
-      process.on('SIGINT', async () =>
-      {
-        logger.info('SIGINT received, shutting down gracefully');
-        await redisManager.disconnect();
-        process.exit(0);
-      });
-    }
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+
+    return server;
   } catch (error)
   {
     logger.error('Failed to start server', { error: error.message });
@@ -143,11 +132,13 @@ const startServer = async () =>
   }
 };
 
-// Only call startServer in local/dev
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL)
+// Vercel requires this export
+const vercelHandler = app;
+
+// Start server in all environments except Vercel production
+if (process.env.VERCEL_ENV !== 'production')
 {
   startServer();
 }
 
-// For Vercel: export the app
-export default app;
+export default vercelHandler;

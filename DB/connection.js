@@ -1,44 +1,46 @@
-import mongoose from "mongoose";
-import logger from '../utils/logger.js';
+import mongoose from 'mongoose';
+import { AppError } from '../utils/errorHandling.js';
 
-const connectionDB = async () =>
+
+// Serverless connection caching
+let cachedConnection = null;
+
+async function connectDB()
 {
+  if (cachedConnection)
+  {
+    return cachedConnection;
+  }
+
+  // Validate environment variable
+  if (!process.env.MONGODB_URI)
+  {
+    throw new AppError("MONGODB_URI environment variable not set");
+  }
+
   try
   {
-    // Debug: Log the actual URI being used
-    console.log('Raw MONGODB_URI:', JSON.stringify(process.env.MONGODB_URI));
-    console.log('URI length:', process.env.MONGODB_URI?.length);
-
+    // Connection options optimized for Vercel
     const options = {
-      serverSelectionTimeoutMS: 30000, // Increase timeout
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10, // Maintain up to 10 socket connections
-      serverApi: {
-        version: '1',
-        strict: true,
-        deprecationErrors: true,
-      }
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000, // Fail fast if no primary available
+      maxPoolSize: 10, // For serverless connection pooling
+      socketTimeoutMS: 45000, // Close sockets after 45s inactivity
     };
-    logger.info('Attempting to connect to MongoDB...');
-    await mongoose.connect(process.env.MONGODB_URI, options);
-    logger.info("DB Connected successfully!");
 
-    // ... rest of your code
-  } catch (err)
+    // Establish connection
+    const connection = await mongoose.connect(process.env.MONGODB_URI, options);
+
+    console.log(`MongoDB Connected: ${connection.connection.host}`);
+    cachedConnection = connection;
+    return connection;
+  } catch (error)
   {
-    logger.error("DB Connection Failed!", {
-      error: err.message,
-      code: err.code,
-      name: err.name,
-      rawUri: process.env.MONGODB_URI ? 'URI exists' : 'URI missing'
-    });
-
-    if (process.env.NODE_ENV === 'production')
-    {
-      logger.info('Retrying connection in 5 seconds...');
-      setTimeout(connectionDB, 5000);
-    }
+    console.error(`DB Connection Error: ${error.message}`);
+    // Rethrow to prevent server from starting without DB
+    throw error;
   }
-};
-export default connectionDB;
-// mongoose.set("strictQuery", true);  
+}
+
+export default connectDB;
