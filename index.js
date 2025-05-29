@@ -55,7 +55,7 @@ app.use(limiter.middleware());
 // Test routes
 app.get('/', (req, res) =>
 {
-  res.json({ message: 'Express server is working' });
+  res.json({ message: 'Your Testly Server is running' });
 });
 
 // Health check endpoint
