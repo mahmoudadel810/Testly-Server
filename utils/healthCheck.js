@@ -64,6 +64,34 @@ export const checkRedisHealth = async () =>
 };
 
 /**
+ * Check environment and Vercel-specific configuration
+ */
+export const checkEnvironmentConfig = () =>
+{
+    const requiredVars = [
+        'MONGODB_URI',
+        'REDIS_URL',
+        'REDIS_HOST',
+        'SIGNATURE'
+    ];
+
+    const missingVars = requiredVars.filter(varName => !process.env[varName]);
+
+    return {
+        status: missingVars.length === 0 ? 'complete' : 'incomplete',
+        environment: process.env.NODE_ENV || 'not set',
+        vercel: {
+            isVercel: !!process.env.VERCEL,
+            vercelEnv: process.env.VERCEL_ENV || 'not set'
+        },
+        missingVars: missingVars.length > 0 ? missingVars : [],
+        message: missingVars.length === 0
+            ? 'All required environment variables are set'
+            : `Missing environment variables: ${missingVars.join(', ')}`
+    };
+};
+
+/**
  * Comprehensive health check for all services
  * @returns {Promise<Object>} Health status of all services
  */
@@ -74,11 +102,11 @@ export const checkSystemHealth = async () =>
         redisManager.healthCheck()
     ]);
 
-    // logger.info('Health Check - DB Status:', dbHealth.status);
-    // logger.info('Health Check - Redis Status:', redisHealth.status);
+    const envConfig = checkEnvironmentConfig();
 
     const isHealthy = dbHealth.status === 'connected' &&
-        (redisHealth.status === 'healthy' || redisHealth.status === 'disconnected');
+        (redisHealth.status === 'healthy' || redisHealth.status === 'disconnected') &&
+        envConfig.status === 'complete';
 
     logger.info('Health Check - isHealthy calculated as:', isHealthy);
 
@@ -88,7 +116,12 @@ export const checkSystemHealth = async () =>
         services: {
             database: dbHealth,
             redis: redisHealth,
-            server: { status: 'running' }
+            environment: envConfig,
+            server: {
+                status: 'running',
+                uptime: `${process.uptime()}s`,
+                memory: process.memoryUsage()
+            }
         }
     };
 };
@@ -96,5 +129,6 @@ export const checkSystemHealth = async () =>
 export default {
     checkDatabaseHealth,
     checkRedisHealth,
+    checkEnvironmentConfig,
     checkSystemHealth
-}; 
+};

@@ -44,6 +44,36 @@ const limiter = createRateLimiter({
 });
 
 //=============================================================
+// Vercel serverless connection handling
+// Track if services are initialized
+let servicesInitialized = false;
+
+// Add middleware to ensure DB/Redis are connected before handling requests
+// This is crucial for serverless environments where the server may cold start frequently
+app.use(async (req, res, next) =>
+{
+  try
+  {
+    // Skip if already initialized or not in Vercel production
+    if (servicesInitialized || process.env.VERCEL_ENV !== 'production')
+    {
+      return next();
+    }
+
+    // Initialize services on first request
+    logger.info('First request detected in Vercel environment, initializing services');
+    await dbConnect();
+    await initializeRedis();
+    servicesInitialized = true;
+    next();
+  } catch (error)
+  {
+    logger.error('Failed to initialize services in middleware', { error: error.message });
+    next(error); // Let error handler deal with it
+  }
+});
+
+//=============================================================
 app.use(cors());
 app.use(json());
 app.use(compression());
@@ -100,6 +130,7 @@ const startServer = async () =>
     // Initialize database and Redis
     await dbConnect(); // Use the new connection handler
     await initializeRedis();
+    servicesInitialized = true;
 
     // Start server
     const server = app.listen(port, () =>
