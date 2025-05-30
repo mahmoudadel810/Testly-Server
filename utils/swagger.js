@@ -6,6 +6,29 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Dynamic server configuration based on environment
+const getServerConfig = (baseUrl) =>
+{
+    const servers = [];
+
+    // Production server configuration
+    if (process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production')
+    {
+        servers.push({
+            url: `https://testly-server.vercel.app/${baseUrl}`,
+            description: 'Production server'
+        });
+    }
+
+    // Development server configuration
+    servers.push({
+        url: `http://localhost:${process.env.PORT || 3000}/${baseUrl}`,
+        description: 'Development server'
+    });
+
+    return servers;
+};
+
 // Swagger options
 const swaggerOptions = {
     definition: {
@@ -24,16 +47,7 @@ const swaggerOptions = {
                 url: 'https://opensource.org/licenses/MIT'
             }
         },
-        servers: [
-            {
-                url: 'https://testly-server.vercel.app',
-                description: 'Production server'
-            },
-            {
-                url: `http://localhost:${process.env.PORT || 3000}`,
-                description: 'Development server'
-            }
-        ],
+        servers: [], // Will be populated dynamically
         components: {
             securitySchemes: {
                 bearerAuth: {
@@ -55,15 +69,23 @@ const swaggerOptions = {
     ]
 };
 
-const swaggerSpec = swaggerJsDoc(swaggerOptions);
-
 const swaggerDocs = (app, baseUrl) =>
 {
+    // Set dynamic servers based on baseUrl
+    swaggerOptions.definition.servers = getServerConfig(baseUrl);
+
+    // Generate swagger spec with dynamic configuration
+    const swaggerSpec = swaggerJsDoc(swaggerOptions);
+
     // Swagger page
     app.use(`/${baseUrl}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
         explorer: true,
         customCss: '.swagger-ui .topbar { display: none }',
-        customSiteTitle: 'Testly API Documentation'
+        customSiteTitle: 'Testly API Documentation',
+        swaggerOptions: {
+            persistAuthorization: true,
+            displayRequestDuration: true
+        }
     }));
 
     // Docs in JSON format
@@ -74,6 +96,8 @@ const swaggerDocs = (app, baseUrl) =>
     });
 
     console.log(`Swagger docs available at /${baseUrl}/docs`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Vercel ENV: ${process.env.VERCEL_ENV || 'not set'}`);
 };
 
 export default swaggerDocs; 
