@@ -138,13 +138,79 @@ const router = Router();
  */
 router.post('/signUp', validation(signUpValidator), authController.register);
 
+/**
+ * @swagger
+ * /api/auth/teacher/signUp:
+ *   post:
+ *     summary: Register a new teacher (requires admin approval)
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UserSignUp'
+ *     responses:
+ *       201:
+ *         description: Teacher registration submitted successfully (pending admin approval)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Teacher registration submitted. Please wait for admin approval.
+ *       400:
+ *         description: Teacher already exists or validation failed
+ *       500:
+ *         description: Error in teacher registration
+ */
 // Add teacher registration route
 router.post('/teacher/signUp', authController.registerTeacher);
 
+/**
+ * @swagger
+ * /api/auth/teachers/confirmed:
+ *   get:
+ *     summary: Get list of confirmed/approved teachers
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: List of confirmed teachers retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                         example: 60d0fe4f5311236168a109ca
+ *                       username:
+ *                         type: string
+ *                         example: teacher_john
+ *                       email:
+ *                         type: string
+ *                         example: john.teacher@example.com
+ *                       role:
+ *                         type: string
+ *                         example: teacher
+ *       500:
+ *         description: Server error
+ */
 // Get confirmed teachers for student registration
 router.get('/teachers/confirmed', authController.getConfirmedTeachers);
-
-
 
 /**
  * @swagger
@@ -396,6 +462,35 @@ router.post('/logout', protect, authController.logOut);
  */
 router.get('/user/:id', protect, authController.getUserById);
 
+/**
+ * @swagger
+ * /api/auth/validateToken:
+ *   get:
+ *     summary: Validate JWT token
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Token is valid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Token is valid
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Invalid or expired token
+ *       500:
+ *         description: Server error
+ */
 router.get('/validateToken', protect, authController.validateToken);
 
 export default router;

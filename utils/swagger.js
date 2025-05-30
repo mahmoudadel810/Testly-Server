@@ -10,13 +10,13 @@ const __dirname = dirname(__filename);
 const swaggerOptions = {
     definition: {
         openapi: '3.0.0',
-        info: { 
+        info: {
             title: 'Testly API Documentation',
             version: '1.0.0',
             description: 'Documentation for the Testly Quiz Application API',
             contact: {
                 name: 'Testly Support',
-                url: 'https:/',
+                url: 'https://testly-server.vercel.app',
                 email: 'support@testly.com'
             },
             license: {
@@ -25,6 +25,10 @@ const swaggerOptions = {
             }
         },
         servers: [
+            {
+                url: 'https://testly-server.vercel.app',
+                description: 'Production server'
+            },
             {
                 url: `http://localhost:${process.env.PORT || 3000}`,
                 description: 'Development server'
@@ -45,7 +49,9 @@ const swaggerOptions = {
         join(__dirname, '../modules/admin/adminRoutes.js'),
         join(__dirname, '../modules/exam/examRoutes.js'),
         join(__dirname, '../modules/attempt/attemptRoutes.js'),
-        join(__dirname, '../DB/models/*.js')
+        join(__dirname, '../modules/contact/contactRoutes.js'),
+        join(__dirname, '../DB/models/*.js'),
+        join(__dirname, '../modules/*/*.js')
     ]
 };
 
@@ -54,7 +60,11 @@ const swaggerSpec = swaggerJsDoc(swaggerOptions);
 const swaggerDocs = (app, baseUrl) =>
 {
     // Swagger page
-    app.use(`/${baseUrl}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.use(`/${baseUrl}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+        explorer: true,
+        customCss: '.swagger-ui .topbar { display: none }',
+        customSiteTitle: 'Testly API Documentation'
+    }));
 
     // Docs in JSON format
     app.get(`/${baseUrl}/docs.json`, (req, res) =>
@@ -63,6 +73,7 @@ const swaggerDocs = (app, baseUrl) =>
         res.send(swaggerSpec);
     });
 
+    console.log(`Swagger docs available at /${baseUrl}/docs`);
 };
 
 export default swaggerDocs; 
