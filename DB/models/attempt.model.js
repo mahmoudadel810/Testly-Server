@@ -129,7 +129,7 @@ const attemptSchema = new mongoose.Schema({
     userRole: {
         type: String,
         required: true,
-        enum: ['User', 'Teacher']
+        enum: ['admin', 'teacher', 'student']
     },
     examId: {
         type: mongoose.Schema.Types.ObjectId,
