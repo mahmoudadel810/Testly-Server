@@ -123,8 +123,13 @@ const answerSchema = new mongoose.Schema({
 const attemptSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+        required: true,
+        refPath: 'userRole'
+    },
+    userRole: {
+        type: String,
+        required: true,
+        enum: ['User', 'Teacher']
     },
     examId: {
         type: mongoose.Schema.Types.ObjectId,

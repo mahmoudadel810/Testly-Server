@@ -52,6 +52,7 @@ export const startExam = asyncHandler(async (req, res, next) =>
     const attempt = await Attempt.create({
         examId,
         userId,
+        userRole: req.user.role, // Set the user's role
         teacherId: exam.createdBy, // Set the teacher ID from the exam
         totalPoints,
         startTime: new Date()
@@ -161,7 +162,7 @@ export const getAttempts = asyncHandler(async (req, res, next) =>
     const userId = req.user._id;
 
     const attempts = await Attempt.find({ userId, isCompleted: true })
-        .populate('userId', 'username email')
+        .populate('userId', 'username  email')
         .populate('examId', 'title description')
         .sort({ createdAt: -1 });
 
@@ -186,7 +187,9 @@ export const getAttempt = asyncHandler(async (req, res, next) =>
     const attempt = await Attempt.findOne({
         _id: attemptId,
         userId
-    }).populate('examId');
+    })
+        .populate('userId', 'username  email')
+        .populate('examId');
 
     if (!attempt)
     {
@@ -210,7 +213,7 @@ export const getAttemptsByTeacher = asyncHandler(async (req, res, next) =>
         teacherId,
         isCompleted: true
     })
-        .populate('userId', 'username email')
+        .populate('userId', 'username  email')
         .populate('examId', 'title description')
         .sort({ createdAt: -1 });
 
@@ -243,7 +246,7 @@ export const getAttemptsByExam = asyncHandler(async (req, res, next) =>
         examId,
         isCompleted: true
     })
-        .populate('userId', 'username email')
+        .populate('userId', 'username  email')
         .sort({ createdAt: -1 });
 
     logger.info('Exam attempts retrieved successfully', { teacherId: teacherId, examId: examId });

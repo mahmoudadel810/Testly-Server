@@ -208,7 +208,7 @@ export const getAllAttempts = asyncHandler(async (req, res, next) =>
 
     // Get from database if not in cache
     const attempts = await Attempt.find()
-        .populate('userId', 'username name email')
+        .populate('userId', 'username  email') // Mongoose uses refPath (userRole) to determine the model
         .populate('examId', 'title')
         .sort({ createdAt: -1 });
 
@@ -249,7 +249,7 @@ export const getAttemptById = asyncHandler(async (req, res, next) =>
 
     // Get from database if not in cache
     const attempt = await Attempt.findById(attemptId)
-        .populate('userId', 'username name email')
+        .populate('userId', 'username  email') // Mongoose uses refPath (userRole) to determine the model
         .populate('examId');
 
     if (!attempt)
