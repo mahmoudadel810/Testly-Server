@@ -551,33 +551,39 @@ export const verifyReset = asyncHandler(async (req, res, next) =>
 
 export const logOut = asyncHandler(async (req, res, next) =>
 {
-    // Get user ID from the authenticated request
-    const userId = req.user.id;
+    // Get user from the authenticated request
+    const user = req.user; // Use the user object provided by the protect middleware
     const token = req.headers.authorization?.split(' ')[1];
 
-    const user = await User.findById(userId);
+    // The protect middleware should handle the case where req.user is not found,
+    // but adding a check here for safety, although it should theoretically not be reached.
     if (!user)
     {
-        return next(new AppError('User not found', 404));
+        return next(new AppError('Authentication failed. User not found in request.', 401));
     }
+
+    // Determine the correct model based on user role
+    const UserModel = user.role === 'teacher' ? Teacher : User;
 
     if (user.isLoggedIn === false)
     {
+        logger.info('User is already logged out', { userId: user._id, role: user.role });
         return res.status(200).json({
             success: true,
             message: "User is already logged out"
         });
     }
 
-    // Update user to set isLoggedIn to false
-    const updatedUser = await User.findByIdAndUpdate(
-        userId,
-        { $set: { isLoggedIn: false, status: "In-Active" } },
+    // Update user to set isLoggedIn to false using the correct model
+    const updatedUser = await UserModel.findByIdAndUpdate(
+        user._id,
+        { $set: { isLoggedIn: false, status: "In-Active" } }, // status might only apply to User model, adjust if needed for Teacher
         { new: true }
     );
 
     if (!updatedUser)
     {
+        // This case is unlikely if findByIdAndUpdate was called on the correct model with a valid ID
         return next(new AppError('Failed to update user logout status', 500));
     }
 
@@ -586,13 +592,13 @@ export const logOut = asyncHandler(async (req, res, next) =>
     {
         try
         {
-            // Remove session from Redis
+            // Remove session from Redis using the token
             await cacheManager.deleteSession(token);
 
-            // Invalidate user cache
+            // Invalidate user cache using the user ID (valid for both User and Teacher)
             if (typeof cacheManager.invalidateUser === 'function')
             {
-                await cacheManager.invalidateUser(userId.toString());
+                await cacheManager.invalidateUser(user._id.toString());
             }
         } catch (error)
         {
@@ -601,8 +607,8 @@ export const logOut = asyncHandler(async (req, res, next) =>
         }
     }
 
-    // Log successful logout
-    logger.info('User logged out successfully', { userId: userId });
+    // Log successful logout with user ID and role
+    logger.info('User logged out successfully', { userId: user._id, role: user.role });
 
     res.status(200).json({
         success: true,

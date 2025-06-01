@@ -77,27 +77,54 @@ const swaggerDocs = (app, baseUrl) =>
     // Generate swagger spec with dynamic configuration
     const swaggerSpec = swaggerJsDoc(swaggerOptions);
 
-    // Swagger page
-    app.use(`/${baseUrl}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-        explorer: true,
-        customCss: '.swagger-ui .topbar { display: none }',
-        customSiteTitle: 'Testly API Documentation',
-        swaggerOptions: {
-            persistAuthorization: true,
-            displayRequestDuration: true
-        }
-    }));
-
-    // Docs in JSON format
-    app.get(`/${baseUrl}/docs.json`, (req, res) =>
+    // Swagger page setup - register for both possible BASE_URLs
+    const setupSwaggerUI = (path) =>
     {
-        res.setHeader('Content-Type', 'application/json');
-        res.send(swaggerSpec);
-    });
+        app.use(path, swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+            explorer: true,
+            customCss: '.swagger-ui .topbar { display: none }',
+            customSiteTitle: 'Testly API Documentation',
+            swaggerOptions: {
+                persistAuthorization: true,
+                displayRequestDuration: true
+            }
+        }));
+    };
 
-    console.log(`Swagger docs available at /${baseUrl}/docs`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`Vercel ENV: ${process.env.VERCEL_ENV || 'not set'}`);
+    // JSON docs setup
+    const setupSwaggerJSON = (path) =>
+    {
+        app.get(path, (req, res) =>
+        {
+            res.setHeader('Content-Type', 'application/json');
+            res.send(swaggerSpec);
+        });
+    };
+
+    // Register swagger routes for current baseUrl
+    setupSwaggerUI(`/${baseUrl}/docs`);
+    setupSwaggerJSON(`/${baseUrl}/docs.json`);
+
+    // If we're in production and baseUrl is 'api', also register for 'testly/v1'
+    if (process.env.VERCEL_ENV === 'production' && baseUrl === 'api')
+    {
+        setupSwaggerUI('/testly/v1/docs');
+        setupSwaggerJSON('/testly/v1/docs.json');
+        console.log(`📚 Additional Swagger docs available at /testly/v1/docs`);
+    }
+
+    // If we're in development and baseUrl is 'testly/v1', also register for 'api'
+    if (process.env.VERCEL_ENV !== 'production' && baseUrl === 'testly/v1')
+    {
+        setupSwaggerUI('/api/docs');
+        setupSwaggerJSON('/api/docs.json');
+        console.log(`📚 Additional Swagger docs available at /api/docs`);
+    }
+
+    console.log(`📚 Swagger docs available at /${baseUrl}/docs`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🚀 Vercel ENV: ${process.env.VERCEL_ENV || 'not set'}`);
+    console.log(`🔗 Current BASE_URL: ${baseUrl}`);
 };
 
 export default swaggerDocs; 
