@@ -162,7 +162,7 @@ export const getAttempts = asyncHandler(async (req, res, next) =>
     const userId = req.user._id;
 
     const attempts = await Attempt.find({ userId, isCompleted: true })
-        .populate('userId', 'username  email')
+        .populate('userId', 'username name email')
         .populate('examId', 'title description')
         .sort({ createdAt: -1 });
 
@@ -188,7 +188,7 @@ export const getAttempt = asyncHandler(async (req, res, next) =>
         _id: attemptId,
         userId
     })
-        .populate('userId', 'username  email')
+        .populate('userId', 'username name email')
         .populate('examId');
 
     if (!attempt)
@@ -213,7 +213,7 @@ export const getAttemptsByTeacher = asyncHandler(async (req, res, next) =>
         teacherId,
         isCompleted: true
     })
-        .populate('userId', 'username  email')
+        .populate('userId', 'username name email')
         .populate('examId', 'title description')
         .sort({ createdAt: -1 });
 
@@ -246,7 +246,7 @@ export const getAttemptsByExam = asyncHandler(async (req, res, next) =>
         examId,
         isCompleted: true
     })
-        .populate('userId', 'username  email')
+        .populate('userId', 'username name email')
         .sort({ createdAt: -1 });
 
     logger.info('Exam attempts retrieved successfully', { teacherId: teacherId, examId: examId });
