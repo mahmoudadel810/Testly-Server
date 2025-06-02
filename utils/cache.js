@@ -25,8 +25,35 @@ const schemas = {
                     }
                 }
             },
-            createdBy: { type: 'string' },
-            teacherId: { type: 'string' },
+            createdBy: {
+                anyOf: [
+                    { type: 'string' },
+                    { type: 'null' },
+                    {
+                        type: 'object',
+                        properties: {
+                            _id: { type: 'string' },
+                            username: { type: 'string' },
+                            email: { type: 'string' },
+                            role: { type: 'string' }
+                        }
+                    }
+                ]
+            },
+            teacherId: {
+                anyOf: [
+                    { type: 'string' },
+                    { type: 'null' },
+                    {
+                        type: 'object',
+                        properties: {
+                            _id: { type: 'string' },
+                            name: { type: 'string' },
+                            email: { type: 'string' }
+                        }
+                    }
+                ]
+            },
             createdAt: { type: 'string' },
             updatedAt: { type: 'string' }
         }

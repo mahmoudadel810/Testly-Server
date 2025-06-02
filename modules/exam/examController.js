@@ -234,18 +234,48 @@ export const getTeacherExams = asyncHandler(async (req, res, next) =>
             { teacherId: teacherId }
         ]
     })
+        .populate('createdBy', 'username email role')
+        .populate('teacherId', 'name email')
         .select('title description duration passingScore createdAt questions')
         .sort({ createdAt: -1 });
 
-    // Cache the exams for 30 minutes
-    await cacheManager.setExamsByTeacher(teacherId, exams);
+    // Process exams to handle cross-model references
+    const processedExams = await Promise.all(exams.map(async (exam) =>
+    {
+        const examObj = exam.toObject();
 
-    console.log(`Found ${exams.length} exams for teacher ${teacherId}`);
+        // If createdBy is null but we have an ID, try to find in Teacher collection
+        if (!examObj.createdBy && exam.createdBy)
+        {
+            try
+            {
+                const teacher = await Teacher.findById(exam.createdBy);
+                if (teacher)
+                {
+                    examObj.createdBy = {
+                        _id: teacher._id.toString(),
+                        username: teacher.name, // Use teacher name as username
+                        email: teacher.email,
+                        role: 'teacher'
+                    };
+                }
+            } catch (error)
+            {
+                console.error(`Error finding teacher for exam ${exam._id}:`, error);
+            }
+        }
+
+        return examObj;
+    }));
+
+    // Cache the exams for 30 minutes
+    await cacheManager.setExamsByTeacher(teacherId, processedExams);
+
     // Log successful retrieval of teacher's exams
     logger.info('Teacher exams retrieved successfully from database', { teacherId: teacherId, count: exams.length });
     res.status(200).json({
         success: true,
-        data: exams,
+        data: processedExams,
         message: 'Teacher exams retrieved successfully'
     });
 });
@@ -277,17 +307,48 @@ export const getExamsByTeacher = asyncHandler(async (req, res, next) =>
             { teacherId: teacherId }
         ]
     })
+        .populate('createdBy', 'username email role')
+        .populate('teacherId', 'name email')
         .select('title description duration passingScore createdAt questions')
         .sort({ createdAt: -1 });
 
+    // Process exams to handle cross-model references
+    const processedExams = await Promise.all(exams.map(async (exam) =>
+    {
+        const examObj = exam.toObject();
+
+        // If createdBy is null but we have an ID, try to find in Teacher collection
+        if (!examObj.createdBy && exam.createdBy)
+        {
+            try
+            {
+                const teacher = await Teacher.findById(exam.createdBy);
+                if (teacher)
+                {
+                    examObj.createdBy = {
+                        _id: teacher._id.toString(),
+                        username: teacher.name, // Use teacher name as username
+                        email: teacher.email,
+                        role: 'teacher'
+                    };
+                }
+            } catch (error)
+            {
+                console.error(`Error finding teacher for exam ${exam._id}:`, error);
+            }
+        }
+
+        return examObj;
+    }));
+
     // Cache the exams for 30 minutes
-    await cacheManager.setExamsByTeacher(teacherId, exams);
+    await cacheManager.setExamsByTeacher(teacherId, processedExams);
 
     logger.info('Exams by teacher retrieved successfully from database', { teacherId: teacherId, count: exams.length });
 
     res.status(200).json({
         success: true,
-        data: exams,
+        data: processedExams,
         message: 'Exams by teacher retrieved successfully'
     });
 });

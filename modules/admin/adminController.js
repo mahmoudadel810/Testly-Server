@@ -12,36 +12,53 @@ import cacheManager from '../../utils/cache.js';
 // name changed to username in DB 
 export const getAllExams = asyncHandler(async (req, res, next) =>
 {
-    // Try to get from cache first
+    // Force refresh from database by invalidating the cache
     const cacheKey = 'admin:all_exams';
-    const cachedExams = await cacheManager.get(cacheKey);
+    await cacheManager.del(cacheKey);
 
-    if (cachedExams)
-    {
-        logger.debug('All exams retrieved from cache by admin');
-        // Log successful retrieval of all exams
-        logger.info('All exams retrieved successfully from cache by admin', { adminId: req.user ? req.user._id : 'unknown', count: cachedExams.length });
-        return res.status(200).json({
-            success: true,
-            data: cachedExams,
-            message: 'All exams retrieved successfully'
-        });
-    }
-
-    // Get from database if not in cache
-    const exams = await Exam.find()
+    // Get exams with populated user references
+    let exams = await Exam.find()
         .populate('createdBy', 'username email role')
         .populate('teacherId', 'name email')
         .sort({ createdAt: -1 });
 
+    // For exams with null createdBy, check if the ID exists in the Teacher collection
+    const processedExams = await Promise.all(exams.map(async (exam) =>
+    {
+        const examObj = exam.toObject();
+
+        // If createdBy is null but we have an ID, try to find in Teacher collection
+        if (!examObj.createdBy && exam.createdBy)
+        {
+            try
+            {
+                const teacher = await Teacher.findById(exam.createdBy);
+                if (teacher)
+                {
+                    examObj.createdBy = {
+                        _id: teacher._id.toString(),
+                        username: teacher.name, // Use teacher name as username
+                        email: teacher.email,
+                        role: 'teacher'
+                    };
+                }
+            } catch (error)
+            {
+                console.error(`Error finding teacher for exam ${exam._id}:`, error);
+            }
+        }
+
+        return examObj;
+    }));
+
     // Cache for 30 minutes
-    await cacheManager.set(cacheKey, exams, 1800);
+    await cacheManager.set(cacheKey, processedExams, 1800);
 
     // Log successful retrieval of all exams
     logger.info('All exams retrieved successfully from database by admin', { adminId: req.user ? req.user._id : 'unknown', count: exams.length });
     res.status(200).json({
         success: true,
-        data: exams,
+        data: processedExams,
         message: 'All exams retrieved successfully'
     });
 });
@@ -52,13 +69,27 @@ export const getAllExams = asyncHandler(async (req, res, next) =>
 
 export const createExam = asyncHandler(async (req, res, next) =>
 {
+    // Set createdBy to the current user's ID
     req.body.createdBy = req.user._id;
+
+    // If the user is a teacher, also set the teacherId
+    if (req.user.role === 'teacher')
+    {
+        req.body.teacherId = req.user._id;
+    }
+
     const exam = await Exam.create(req.body);
 
-    // Invalidate relevant caches after creating exam
+    // Get the populated exam data
+    const populatedExam = await Exam.findById(exam._id)
+        .populate('createdBy', 'username email role')
+        .populate('teacherId', 'name email');
+
+    // Invalidate ALL exam-related caches to ensure fresh data
     await Promise.all([
         cacheManager.del('admin:all_exams'),
         cacheManager.del('exam_count'),
+        cacheManager.invalidateExam(exam._id),
         cacheManager.invalidateTeacherData(req.user._id)
     ]);
 
@@ -68,7 +99,7 @@ export const createExam = asyncHandler(async (req, res, next) =>
     res.status(201).json({
         success: true,
         message: "Exam created successfully",
-        data: exam
+        data: populatedExam
     });
 });
 
@@ -104,15 +135,39 @@ export const getExamById = asyncHandler(async (req, res, next) =>
         return next(new AppError('Exam not found with this ID', 404));
     }
 
-    // Cache the exam
-    await cacheManager.setExam(examId, exam);
+    // Convert to plain object for modification
+    const examObj = exam.toObject();
+
+    // If createdBy is null but we have an ID, try to find in Teacher collection
+    if (!examObj.createdBy && exam.createdBy)
+    {
+        try
+        {
+            const teacher = await Teacher.findById(exam.createdBy);
+            if (teacher)
+            {
+                examObj.createdBy = {
+                    _id: teacher._id.toString(),
+                    username: teacher.name, // Use teacher name as username
+                    email: teacher.email,
+                    role: 'teacher'
+                };
+            }
+        } catch (error)
+        {
+            console.error(`Error finding teacher for exam ${exam._id}:`, error);
+        }
+    }
+
+    // Cache the populated exam
+    await cacheManager.setExam(examId, examObj);
 
     // Log successful retrieval of a single exam by admin
     logger.info('Exam retrieved successfully from database by admin', { adminId: req.user._id, examId: exam._id });
 
     res.status(200).json({
         success: true,
-        data: exam,
+        data: examObj,
         message: 'Exam retrieved successfully'
     });
 });
