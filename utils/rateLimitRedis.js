@@ -6,8 +6,9 @@ class RedisRateLimiter
 {
     constructor(options = {})
     {
-        this.windowMs = options.windowMs || 15 * 60 * 1000; // 15 minutes
-        this.maxRequests = options.max || 100;
+        //i will change this later after testing 
+        this.windowMs = options.windowMs || 3 * 60 * 1000; // 3 minutes
+        this.maxRequests = options.max || 500;
         this.keyPrefix = options.keyPrefix || 'rate_limit:';
         this.skipSuccessfulRequests = options.skipSuccessfulRequests || false;
         this.skipFailedRequests = options.skipFailedRequests || false;
