@@ -30,7 +30,7 @@ export const getAllExams = asyncHandler(async (req, res, next) =>
 
     // Get from database if not in cache
     const exams = await Exam.find()
-        .populate('createdBy', 'username email')
+        .populate('createdBy', 'username email role')
         .populate('teacherId', 'name email')
         .sort({ createdAt: -1 });
 
@@ -96,7 +96,7 @@ export const getExamById = asyncHandler(async (req, res, next) =>
 
     // Get from database if not in cache
     const exam = await Exam.findById(examId)
-        .populate('createdBy', 'username email')
+        .populate('createdBy', 'username email role')
         .populate('teacherId', 'name email');
 
     if (!exam)
