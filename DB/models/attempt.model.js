@@ -44,6 +44,14 @@ import mongoose from 'mongoose';
  *         examId:
  *           type: string
  *           description: ID of the exam being attempted
+ *         userRole:
+ *           type: string
+ *           description: Role of the user taking the exam
+ *           enum: [student, admin, teacher]
+ *         userModel:
+ *           type: string
+ *           description: Model reference for the user
+ *           enum: [User, Teacher]
  *         startTime:
  *           type: string
  *           format: date-time
@@ -121,15 +129,20 @@ const answerSchema = new mongoose.Schema({
 });
 
 const attemptSchema = new mongoose.Schema({
-    userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        required: true,
-        refPath: 'userRole'
-    },
     userRole: {
         type: String,
-        required: true,
-        enum: ['admin', 'teacher', 'User']
+        enum: ['student', 'admin', 'teacher'],
+        required: true
+    },
+    userModel: {
+        type: String,
+        enum: ['User', 'Teacher'],
+        required: true
+    },
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        refPath: 'userModel',
+        required: true
     },
     examId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -138,7 +151,7 @@ const attemptSchema = new mongoose.Schema({
     },
     teacherId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'teacher',
+        ref: 'Teacher',
         required: false
     },
     startTime: {

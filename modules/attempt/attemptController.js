@@ -52,7 +52,8 @@ export const startExam = asyncHandler(async (req, res, next) =>
     const attempt = await Attempt.create({
         examId,
         userId,
-        userRole: req.user.role, // Set the user's role
+        userRole: req.user.role, // Set the user's role (student or admin)
+        userModel: 'User', // All users are in the User model
         teacherId: exam.createdBy, // Set the teacher ID from the exam
         totalPoints,
         startTime: new Date()
