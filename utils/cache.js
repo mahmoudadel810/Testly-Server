@@ -441,6 +441,26 @@ class CacheManager
         return deletedCount;
     }
 
+    async invalidateTeacherList()
+    {
+        // Invalidate all teacher-related caches
+        const keys = [
+            'auth:confirmed_teachers',
+            'admin:pending_teachers',
+            'admin:pending_teachers_count'
+        ];
+
+        let deletedCount = 0;
+        for (const key of keys)
+        {
+            const deleted = await this.del(key);
+            if (deleted) deletedCount++;
+        }
+
+        logger.info('Teacher list cache invalidated', { deletedCount });
+        return deletedCount;
+    }
+
     async invalidateUser(userId)
     {
         const patterns = [
