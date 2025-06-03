@@ -118,8 +118,20 @@ export const registerTeacher = asyncHandler(async (req, res, next) =>
 
     await newTeacher.save();
 
-    // Invalidate teacher-related caches
-    await cacheManager.invalidateTeacherList();
+    if (cacheManager && typeof cacheManager.del === 'function')
+    {
+        try
+        {
+            await Promise.all([
+                cacheManager.del('admin:pending_teachers'),
+                cacheManager.del('admin:pending_teachers_count')
+            ]);
+        } catch (error)
+        {
+            // Silently handle cache errors - don't affect the API behavior
+            logger.warn('Failed to invalidate teacher cache', { error: error.message });
+        }
+    }
 
     // Log successful teacher registration
     logger.info('Teacher registered successfully and pending approval', { teacherId: newTeacher._id, email: newTeacher.email });

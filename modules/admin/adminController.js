@@ -408,8 +408,12 @@ export const approveTeacher = asyncHandler(async (req, res, next) =>
     teacher.status = 'Active';
     await teacher.save();
 
-    // Invalidate all teacher-related caches
-    await cacheManager.invalidateTeacherList();
+    // Invalidate teacher-related caches
+    await Promise.all([
+        cacheManager.del('admin:pending_teachers'),
+        cacheManager.del('admin:pending_teachers_count'),
+        cacheManager.del('auth:confirmed_teachers')
+    ]);
 
     // Send approval email
     const approvalEmailSent = await sendEmail({
@@ -471,8 +475,12 @@ export const rejectTeacher = asyncHandler(async (req, res, next) =>
     // Delete the teacher from database after sending email
     await Teacher.findByIdAndDelete(id);
 
-    // Invalidate all teacher-related caches
-    await cacheManager.invalidateTeacherList();
+    // Invalidate teacher-related caches
+    await Promise.all([
+        cacheManager.del('admin:pending_teachers'),
+        cacheManager.del('admin:pending_teachers_count'),
+        cacheManager.del('auth:confirmed_teachers')
+    ]);
 
     // Log successful teacher rejection
     logger.info('Teacher application rejected successfully by admin', { adminId: req.user._id, teacherId: teacher._id });
