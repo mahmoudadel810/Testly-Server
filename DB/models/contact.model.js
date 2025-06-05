@@ -18,7 +18,7 @@ const contactSchema = new mongoose.Schema({
     message: {
         type: String,
         required: [true, 'Message is required'],
-        minLength: [20, 'Message must be at least 20 characters']
+        minLength: [5, 'Message must be at least 5 characters']
     },
     createdAt: {
         type: Date,
