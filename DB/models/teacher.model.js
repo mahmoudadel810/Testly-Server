@@ -43,7 +43,7 @@ const teacherSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ["Active", "Inactive"],
+        enum: ["Active", "In-Active"],
         default: "Active",
     },
     role: {
@@ -52,9 +52,9 @@ const teacherSchema = new mongoose.Schema({
         default: "teacher",
     }
 },
-{
-    timestamps: true
-});
+    {
+        timestamps: true
+    });
 
 const Teacher = mongoose.model("Teacher", teacherSchema);
 

@@ -333,7 +333,7 @@ export const logIn = asyncHandler(async (req, res, next) =>
 
         await Teacher.findOneAndUpdate(
             { email },
-            { $set: { isLoggedIn: true } }
+            { $set: { isLoggedIn: true, status: "Active" } }
         );
 
         return res.status(200).json({
@@ -537,9 +537,18 @@ export const logOut = asyncHandler(async (req, res, next) =>
     }
 
     // Update user to set isLoggedIn to false using the correct model
+    // For teachers, we only update isLoggedIn, not status
+    const updateFields = { isLoggedIn: false };
+
+    // Only set status to "In-Active" for regular users (students), not for teachers
+    if (user.role !== 'teacher')
+    {
+        updateFields.status = "In-Active";
+    }
+
     const updatedUser = await UserModel.findByIdAndUpdate(
         user._id,
-        { $set: { isLoggedIn: false, status: "In-Active" } }, // status might only apply to User model, adjust if needed for Teacher
+        { $set: updateFields },
         { new: true }
     );
 
