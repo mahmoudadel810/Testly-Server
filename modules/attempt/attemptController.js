@@ -182,7 +182,7 @@ export const getAttempts = asyncHandler(async (req, res, next) =>
         .sort({ createdAt: -1 });
 
     logger.info('User attempt history retrieved successfully', { userId: userId });
-    res.status(200).json({
+    res.status(200).json({  
         success: true,
         data: attempts,
         message: 'User attempt history retrieved successfully'
