@@ -358,7 +358,7 @@ export const approveTeacher = asyncHandler(async (req, res, next) =>
             <p>You can now log in to your account and start creating exams for your students.</p>
             <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
             <div style="text-align: center; margin-top: 30px;">
-                <a href="${process.env.FRONTEND_URL}/login" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Login to Your Account</a>
+                <a href="${process.env.FRONTEND_URL || 'https://testly-sand.vercel.app'}/login" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Login to Your Account</a>
             </div>
             <p style="margin-top: 30px; text-align: center; color: #666;">Thank you for joining our teaching community!</p>
         </div>`

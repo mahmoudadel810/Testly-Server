@@ -43,7 +43,7 @@ export const register = asyncHandler(async (req, res, next) =>
     // console.log("token", token);
 
     // The component made by FE to confirm email after user click mail
-    const confirmationLink = `https://testly-sand.vercel.app/confirm-email/${token}`;
+    const confirmationLink = `${process.env.FRONTEND_URL || 'https://testly-sand.vercel.app'}/confirm-email/${token}`;
     const emailed = await sendEmail({
         to: newUser.email,
         subject: 'confirmationEmail',
