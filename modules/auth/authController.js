@@ -145,50 +145,13 @@ export const registerTeacher = asyncHandler(async (req, res, next) =>
 // Get all confirmed teachers for student selection
 export const getConfirmedTeachers = asyncHandler(async (req, res, next) =>
 {
-    // Redis caching addition (non-destructive) - Try to get from cache first
-    let cachedTeachers;
-    if (cacheManager && typeof cacheManager.get === 'function')
-    {
-        try
-        {
-            const cacheKey = 'auth:confirmed_teachers';
-            cachedTeachers = await cacheManager.get(cacheKey);
-
-            if (cachedTeachers)
-            {
-                logger.debug('Confirmed teachers retrieved from cache');
-                return res.status(200).json({
-                    success: true,
-                    data: cachedTeachers,
-                    message: 'Confirmed teachers retrieved successfully'
-                });
-            }
-        } catch (error)
-        {
-            // Silently handle cache errors - don't affect the API behavior
-            logger.warn('Failed to get teachers from cache', { error: error.message });
-        }
-    }
-
-    // Get all confirmed teachers and return just their ID and name
+   
     const confirmedTeachers = await Teacher.find({
         confirmedAsTeacher: true,
         status: 'Active'
     }).select('_id name');
 
-    // Redis caching addition (non-destructive) - Cache the result for future requests
-    if (cacheManager && typeof cacheManager.set === 'function')
-    {
-        try
-        {
-            const cacheKey = 'auth:confirmed_teachers';
-            await cacheManager.set(cacheKey, confirmedTeachers, 3600); // Cache for 1 hour
-        } catch (error)
-        {
-            // Silently handle cache errors - don't affect the API behavior
-            logger.warn('Failed to cache teachers', { error: error.message });
-        }
-    }
+    logger.info('Confirmed teachers retrieved directly from database');
 
     res.status(200).json({
         success: true,

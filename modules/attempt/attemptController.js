@@ -2,6 +2,7 @@ import Exam from '../../DB/models/exam.model.js';
 import Attempt from '../../DB/models/attempt.model.js';
 import { asyncHandler, AppError } from '../../utils/errorHandling.js';
 import logger from '../../utils/logger.js';
+import cacheManager from '../../utils/cache.js';
 
 
 
@@ -142,6 +143,19 @@ export const submitExam = asyncHandler(async (req, res, next) =>
     attempt.isCompleted = true;
 
     await attempt.save();
+
+    // Invalidate the admin attempts cache to ensure admin dashboard shows the latest results
+    if (cacheManager && typeof cacheManager.del === 'function')
+    {
+        try
+        {
+            await cacheManager.del('admin:all_attempts');
+            logger.debug('Admin attempts cache invalidated after new submission');
+        } catch (error)
+        {
+            logger.warn('Failed to invalidate admin attempts cache', { error: error.message });
+        }
+    }
 
     // Log successful submission of exam
     logger.info('Exam submitted successfully', { userId: userId, examId: attempt.examId, attemptId: attempt._id });

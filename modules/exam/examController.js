@@ -213,21 +213,7 @@ export const getTeacherExams = asyncHandler(async (req, res, next) =>
 {
     const teacherId = req.user._id;
 
-    // Try to get from cache first
-    const cachedExams = await cacheManager.getExamsByTeacher(teacherId);
-
-    if (cachedExams)
-    {
-        logger.debug('Teacher exams retrieved from cache', { teacherId });
-        logger.info('Teacher exams retrieved successfully from cache', { teacherId, count: cachedExams.length });
-        return res.status(200).json({
-            success: true,
-            data: cachedExams,
-            message: 'Teacher exams retrieved successfully'
-        });
-    }
-
-    // Find exams created by this teacher (check both createdBy and teacherId fields)
+  
     const exams = await Exam.find({
         $or: [
             { createdBy: teacherId },
@@ -268,11 +254,8 @@ export const getTeacherExams = asyncHandler(async (req, res, next) =>
         return examObj;
     }));
 
-    // Cache the exams for 30 minutes
-    await cacheManager.setExamsByTeacher(teacherId, processedExams);
-
     // Log successful retrieval of teacher's exams
-    logger.info('Teacher exams retrieved successfully from database', { teacherId: teacherId, count: exams.length });
+    logger.info('Teacher exams retrieved directly from database', { teacherId: teacherId, count: exams.length });
     res.status(200).json({
         success: true,
         data: processedExams,
@@ -286,19 +269,7 @@ export const getExamsByTeacher = asyncHandler(async (req, res, next) =>
 {
     const { teacherId } = req.params;
 
-    // Try to get from cache first
-    const cachedExams = await cacheManager.getExamsByTeacher(teacherId);
 
-    if (cachedExams)
-    {
-        logger.debug('Exams by teacher retrieved from cache', { teacherId });
-        logger.info('Exams by teacher retrieved successfully from cache', { teacherId: teacherId, count: cachedExams.length });
-        return res.status(200).json({
-            success: true,
-            data: cachedExams,
-            message: 'Exams by teacher retrieved successfully'
-        });
-    }
 
     // Find exams created by this teacher
     const exams = await Exam.find({
@@ -341,10 +312,7 @@ export const getExamsByTeacher = asyncHandler(async (req, res, next) =>
         return examObj;
     }));
 
-    // Cache the exams for 30 minutes
-    await cacheManager.setExamsByTeacher(teacherId, processedExams);
-
-    logger.info('Exams by teacher retrieved successfully from database', { teacherId: teacherId, count: exams.length });
+    logger.info('Exams by teacher retrieved directly from database', { teacherId: teacherId, count: exams.length });
 
     res.status(200).json({
         success: true,

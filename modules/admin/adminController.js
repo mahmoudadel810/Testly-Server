@@ -12,11 +12,9 @@ import cacheManager from '../../utils/cache.js';
 // name changed to username in DB 
 export const getAllExams = asyncHandler(async (req, res, next) =>
 {
-    // Force refresh from database by invalidating the cache
-    const cacheKey = 'admin:all_exams';
-    await cacheManager.del(cacheKey);
 
-    // Get exams with populated user references
+
+    // Get exams with populated user references directly from database
     let exams = await Exam.find()
         .populate('createdBy', 'username email role')
         .populate('teacherId', 'name email')
@@ -51,11 +49,9 @@ export const getAllExams = asyncHandler(async (req, res, next) =>
         return examObj;
     }));
 
-    // Cache for 30 minutes
-    await cacheManager.set(cacheKey, processedExams, 1800);
-
     // Log successful retrieval of all exams
-    logger.info('All exams retrieved successfully from database by admin', { adminId: req.user ? req.user._id : 'unknown', count: exams.length });
+    logger.info('All exams retrieved directly from database by admin', { adminId: req.user ? req.user._id : 'unknown', count: exams.length });
+
     res.status(200).json({
         success: true,
         data: processedExams,
@@ -89,6 +85,7 @@ export const createExam = asyncHandler(async (req, res, next) =>
     await Promise.all([
         cacheManager.del('admin:all_exams'),
         cacheManager.del('exam_count'),
+        cacheManager.invalidateTeacherLists(),
         cacheManager.invalidateExam(exam._id),
         cacheManager.invalidateTeacherData(req.user._id)
     ]);
@@ -110,22 +107,10 @@ export const getExamById = asyncHandler(async (req, res, next) =>
 {
     const examId = req.params.id;
 
-    // Try to get from cache first
-    const cachedExam = await cacheManager.getExam(examId);
 
-    if (cachedExam)
-    {
-        logger.debug('Exam retrieved from cache by admin', { examId });
-        // Log successful retrieval of a single exam by admin
-        logger.info('Exam retrieved successfully from cache by admin', { adminId: req.user._id, examId: examId });
-        return res.status(200).json({
-            success: true,
-            data: cachedExam,
-            message: 'Exam retrieved successfully'
-        });
-    }
 
-    // Get from database if not in cache
+    // Get directly from database to ensure real-time data
+    //ممكن اغيرها بعدين وانا بضيف الكاش
     const exam = await Exam.findById(examId)
         .populate('createdBy', 'username email role')
         .populate('teacherId', 'name email');
@@ -159,11 +144,8 @@ export const getExamById = asyncHandler(async (req, res, next) =>
         }
     }
 
-    // Cache the populated exam
-    await cacheManager.setExam(examId, examObj);
-
     // Log successful retrieval of a single exam by admin
-    logger.info('Exam retrieved successfully from database by admin', { adminId: req.user._id, examId: exam._id });
+    logger.info('Exam retrieved directly from database by admin', { adminId: req.user._id, examId: exam._id });
 
     res.status(200).json({
         success: true,
@@ -193,9 +175,12 @@ export const updateExam = asyncHandler(async (req, res, next) =>
     );
 
     // Invalidate exam-related caches
-    await cacheManager.invalidateExam(examId);
-    await cacheManager.del('admin:all_exams');
-    await cacheManager.del('exam_count');
+    await Promise.all([
+        cacheManager.invalidateExam(examId),
+        cacheManager.del('admin:all_exams'),
+        cacheManager.del('exam_count'),
+        cacheManager.invalidateTeacherLists()
+    ]);
 
     // Log successful update of exam by admin
     logger.info('Exam updated successfully by admin/teacher', { userId: req.user._id, examId: updatedExam._id });
@@ -230,6 +215,7 @@ export const deleteExam = asyncHandler(async (req, res, next) =>
         cacheManager.invalidateExam(examId),
         cacheManager.del('admin:all_exams'),
         cacheManager.del('exam_count'),
+        cacheManager.invalidateTeacherLists(),
         cacheManager.invalidateTeacherData(exam.createdBy || exam.teacherId)
     ]);
 
@@ -245,33 +231,18 @@ export const deleteExam = asyncHandler(async (req, res, next) =>
 //===========================get all attempts to the exam
 export const getAllAttempts = asyncHandler(async (req, res, next) =>
 {
-    // Try to get from cache first
-    const cacheKey = 'admin:all_attempts';
-    const cachedAttempts = await cacheManager.get(cacheKey);
+    // NOTE: This endpoint intentionally bypasses cache to ensure real-time data
+    // for the admin dashboard. DO NOT add caching here without addressing
+    // the real-time data requirements.
 
-    if (cachedAttempts)
-    {
-        logger.debug('All attempts retrieved from cache by admin');
-        // Log successful retrieval of all attempts by admin
-        logger.info('All attempts retrieved successfully from cache by admin', { adminId: req.user ? req.user._id : 'unknown', count: cachedAttempts.length });
-        return res.status(200).json({
-            success: true,
-            data: cachedAttempts,
-            message: 'All attempts retrieved successfully'
-        });
-    }
-
-    // Get from database if not in cache
+    // Get directly from database to ensure real-time data
     const attempts = await Attempt.find()
         .populate('userId', 'username name email') // Include name for teachers
         .populate('examId', 'title')
         .sort({ createdAt: -1 });
 
-    // Cache for 15 minutes (shorter time as this data changes frequently)
-    await cacheManager.set(cacheKey, attempts, 900);
-
     // Log successful retrieval of all attempts by admin
-    logger.info('All attempts retrieved successfully from database by admin', { adminId: req.user ? req.user._id : 'unknown', count: attempts.length });
+    logger.info('All attempts retrieved directly from database by admin', { adminId: req.user ? req.user._id : 'unknown', count: attempts.length });
 
     res.status(200).json({
         success: true,
@@ -287,22 +258,11 @@ export const getAttemptById = asyncHandler(async (req, res, next) =>
 {
     const attemptId = req.params.id;
 
-    // Try to get from cache first
-    const cachedAttempt = await cacheManager.getAttempt(attemptId);
+    // NOTE: This endpoint intentionally bypasses cache to ensure real-time data
+    // for the admin dashboard. DO NOT add caching here without addressing
+    // the real-time data requirements.
 
-    if (cachedAttempt)
-    {
-        logger.debug('Attempt retrieved from cache by admin', { attemptId });
-        // Log successful retrieval of a single attempt by admin
-        logger.info('Attempt retrieved successfully from cache by admin', { adminId: req.user._id, attemptId: attemptId });
-        return res.status(200).json({
-            success: true,
-            data: cachedAttempt,
-            message: 'Attempt retrieved successfully'
-        });
-    }
-
-    // Get from database if not in cache
+    // Get directly from database to ensure real-time data
     const attempt = await Attempt.findById(attemptId)
         .populate('userId', 'username name email') // Include name for teachers
         .populate('examId');
@@ -312,11 +272,8 @@ export const getAttemptById = asyncHandler(async (req, res, next) =>
         return next(new AppError('Attempt not found', 404));
     }
 
-    // Cache the attempt
-    await cacheManager.setAttempt(attemptId, attempt);
-
     // Log successful retrieval of a single attempt by admin
-    logger.info('Attempt retrieved successfully from database by admin', { adminId: req.user._id, attemptId: attempt._id });
+    logger.info('Attempt retrieved directly from database by admin', { adminId: req.user._id, attemptId: attempt._id });
 
     res.status(200).json({
         success: true,
@@ -328,29 +285,15 @@ export const getAttemptById = asyncHandler(async (req, res, next) =>
 // Get all pending teachers
 export const getPendingTeachers = asyncHandler(async (req, res, next) =>
 {
-    // Try to get from cache first
-    const cacheKey = 'admin:pending_teachers';
-    const cachedTeachers = await cacheManager.get(cacheKey);
+    // NOTE: This endpoint intentionally bypasses cache to ensure real-time data
+    // for the admin dashboard. DO NOT add caching here without addressing
+    // the real-time data requirements.
 
-    if (cachedTeachers)
-    {
-        logger.debug('Pending teachers retrieved from cache by admin');
-        logger.info('Pending teachers retrieved successfully from cache by admin', { adminId: req.user ? req.user._id : 'unknown', count: cachedTeachers.length });
-        return res.status(200).json({
-            success: true,
-            data: cachedTeachers,
-            message: 'Pending teachers retrieved successfully'
-        });
-    }
-
-    // Get from database if not in cache
+    // Get directly from database to ensure real-time data
     const pendingTeachers = await Teacher.find({ confirmedAsTeacher: false })
         .sort({ createdAt: -1 });
 
-    // Cache for 10 minutes (shorter time as this data changes when teachers apply)
-    await cacheManager.set(cacheKey, pendingTeachers, 600);
-
-    logger.info('Pending teachers retrieved successfully from database by admin', { adminId: req.user ? req.user._id : 'unknown', count: pendingTeachers.length });
+    logger.info('Pending teachers retrieved directly from database by admin', { adminId: req.user ? req.user._id : 'unknown', count: pendingTeachers.length });
 
     res.status(200).json({
         success: true,
@@ -362,29 +305,16 @@ export const getPendingTeachers = asyncHandler(async (req, res, next) =>
 // Get count of pending teachers
 export const getPendingTeachersCount = asyncHandler(async (req, res, next) =>
 {
-    // Try to get from cache first
-    const cacheKey = 'admin:pending_teachers_count';
-    const cachedCount = await cacheManager.get(cacheKey);
+    // NOTE: This endpoint intentionally bypasses cache to ensure real-time data
+    // for the admin dashboard. DO NOT add caching here without addressing
+    // the real-time data requirements.
 
-    if (cachedCount !== null)
-    {
-        logger.debug('Pending teachers count retrieved from cache by admin');
-        logger.info('Pending teachers count retrieved successfully from cache by admin', { adminId: req.user ? req.user._id : 'unknown', count: cachedCount });
-        return res.status(200).json({
-            success: true,
-            data: { count: cachedCount },
-            message: 'Pending teachers count retrieved successfully'
-        });
-    }
-
-    // Get from database if not in cache
+    // Get directly from database to ensure real-time data
     const count = await Teacher.countDocuments({ confirmedAsTeacher: false });
 
-    // Cache for 10 minutes
-    await cacheManager.set(cacheKey, count, 600);
-
     // Log successful retrieval of pending teachers count
-    logger.info('Pending teachers count retrieved successfully from database by admin', { adminId: req.user ? req.user._id : 'unknown', count: count });
+    logger.info('Pending teachers count retrieved directly from database by admin', { adminId: req.user ? req.user._id : 'unknown', count: count });
+
     res.status(200).json({
         success: true,
         data: { count },
@@ -397,6 +327,7 @@ export const approveTeacher = asyncHandler(async (req, res, next) =>
 {
     const { id } = req.params;
 
+    // Find the teacher by ID
     const teacher = await Teacher.findById(id);
 
     if (!teacher)
@@ -404,6 +335,7 @@ export const approveTeacher = asyncHandler(async (req, res, next) =>
         return next(new AppError('Teacher not found', 404));
     }
 
+    // Update teacher status
     teacher.confirmedAsTeacher = true;
     teacher.status = 'Active';
     await teacher.save();
@@ -412,38 +344,31 @@ export const approveTeacher = asyncHandler(async (req, res, next) =>
     await Promise.all([
         cacheManager.del('admin:pending_teachers'),
         cacheManager.del('admin:pending_teachers_count'),
-        cacheManager.del('auth:confirmed_teachers')
+        cacheManager.invalidateTeacherLists()
     ]);
 
     // Send approval email
-    const approvalEmailSent = await sendEmail({
+    const approvalEmail = await sendEmail({
         to: teacher.email,
         subject: 'Teacher Account Approved',
         message: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-            <h2 style="color: #4a6bff; text-align: center;">Congratulations! Your Teacher Account Has Been Approved</h2>
-            <p style="font-size: 16px; line-height: 1.5; color: #333;">Dear ${teacher.name},</p>
-            <p style="font-size: 16px; line-height: 1.5; color: #333;">We're pleased to inform you that your teacher account has been approved. You can now create exams for your students.</p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="http://localhost:4200/login" style="background-color: #4a6bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">Login to Your Account</a>
+            <h2 style="color: #4CAF50; text-align: center;">Your Teacher Account Has Been Approved!</h2>
+            <p>Dear ${teacher.name},</p>
+            <p>We are pleased to inform you that your application to become a teacher on our platform has been approved.</p>
+            <p>You can now log in to your account and start creating exams for your students.</p>
+            <p>If you have any questions or need assistance, please don't hesitate to contact our support team.</p>
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="${process.env.FRONTEND_URL}/login" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Login to Your Account</a>
             </div>
-            <p style="font-size: 14px; color: #666; margin-top: 30px;">Thank you for joining Testly as a teacher!</p>
-          </div>`
+            <p style="margin-top: 30px; text-align: center; color: #666;">Thank you for joining our teaching community!</p>
+        </div>`
     });
 
-    // Log successful teacher approval
-    logger.info('Teacher approved successfully by admin', { adminId: req.user._id, teacherId: teacher._id });
-
-    if (!approvalEmailSent)
-    {
-        return res.status(200).json({
-            success: true,
-            message: 'Teacher approved successfully, but email notification failed to send'
-        });
-    }
+    logger.info(`Teacher ${id} approved successfully by admin ${req.user._id}`);
 
     res.status(200).json({
         success: true,
-        message: 'Teacher approved successfully and notification email sent'
+        message: 'Teacher approved successfully'
     });
 });
 
@@ -479,7 +404,7 @@ export const rejectTeacher = asyncHandler(async (req, res, next) =>
     await Promise.all([
         cacheManager.del('admin:pending_teachers'),
         cacheManager.del('admin:pending_teachers_count'),
-        cacheManager.del('auth:confirmed_teachers')
+        cacheManager.invalidateTeacherLists()
     ]);
 
     // Log successful teacher rejection

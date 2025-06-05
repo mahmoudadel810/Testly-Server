@@ -479,6 +479,39 @@ class CacheManager
         return deletedCount;
     }
 
+    // Add a new method to invalidate all teacher-related caches
+    async invalidateTeacherLists()
+    {
+        if (!redisManager.isReady())
+        {
+            logger.debug('Redis not available, skipping teacher lists invalidation');
+            return false;
+        }
+
+        try
+        {
+            const client = redisManager.getClient();
+            if (!client)
+            {
+                logger.debug('Redis client not available, skipping teacher lists invalidation');
+                return false;
+            }
+
+            // Delete teacher-related caches
+            await Promise.all([
+                this.del('auth:confirmed_teachers'),
+                this.delPattern('exams:teacher:*')
+            ]);
+
+            logger.info('Teacher lists invalidated in cache');
+            return true;
+        } catch (error)
+        {
+            logger.error('Failed to invalidate teacher lists', { error: error.message });
+            return false;
+        }
+    }
+
     // Health check
     async healthCheck()
     {
