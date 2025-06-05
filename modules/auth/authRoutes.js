@@ -3,6 +3,7 @@ import { protect } from '../../middelWares/auth.js';
 import { validation } from "../../middelWares/validation.js";
 import { signUpValidator, loginValidator, verifyReset } from "./authValidation.js";
 import * as authController from "./authController.js";
+import { authorize } from '../../middelWares/auth.js';
 const router = Router();
 
 /**
@@ -460,7 +461,7 @@ router.post('/logout', protect, authController.logOut);
  *       500:
  *         description: Server error
  */
-router.get('/user/:id', protect, authController.getUserById);
+router.get('/user/:id', protect, authorize('admin', 'user'), authController.getUserById);
 
 /**
  * @swagger

@@ -145,7 +145,7 @@ export const registerTeacher = asyncHandler(async (req, res, next) =>
 // Get all confirmed teachers for student selection
 export const getConfirmedTeachers = asyncHandler(async (req, res, next) =>
 {
-   
+
     const confirmedTeachers = await Teacher.find({
         confirmedAsTeacher: true,
         status: 'Active'
@@ -582,7 +582,15 @@ export const logOut = asyncHandler(async (req, res, next) =>
 
 export const getUserById = asyncHandler(async (req, res, next) =>
 {
-    const user = await User.findById(req.params.id);
+    const userId = req.params.id;
+
+
+    if (req.user.role !== 'admin' && req.user._id.toString() !== userId)
+    {
+        return next(new AppError('Not authorized to access this user data', 403));
+    }
+
+    const user = await User.findById(userId);
     if (!user)
     {
         return next(new AppError('User not found', 404));
