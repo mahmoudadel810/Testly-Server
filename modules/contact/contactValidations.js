@@ -7,7 +7,7 @@ export const contactValidation = {
             'string.min': 'Name must be at least 2 characters',
             'any.required': 'Name is required'
         }),
-        email: joi.string().email().required().messages({
+        email: joi.string().email({ tlds: { allow: false } }).required().messages({
             'string.empty': 'Email is required',
             'string.email': 'Please enter a valid email address',
             'any.required': 'Email is required'

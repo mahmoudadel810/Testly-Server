@@ -1,8 +1,5 @@
 import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
 import { AppError } from '../utils/errorHandling.js';
-
-dotenv.config();
 
 export const sendEmail = async ({ to = '', message = '', subject = '' }) =>
 {
@@ -15,14 +12,14 @@ export const sendEmail = async ({ to = '', message = '', subject = '' }) =>
         throw new AppError('Email service not configured.', 503);
     }
 
+    // Gmail over STARTTLS on 587 (465 fails on IPv6-only routes); certificates are verified
     let transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
         auth: {
             user: emailUser,
             pass: emailPass
-        },
-        tls: {
-            rejectUnauthorized: false // Only use this in development
         }
     });
 
@@ -64,5 +61,19 @@ export const sendEmail = async ({ to = '', message = '', subject = '' }) =>
         }
 
         throw new AppError('Failed to send email. Please try again later.', 503);
+    }
+};
+
+// Best-effort variant for notifications that must not block the main action:
+// returns true/false instead of throwing.
+export const trySendEmail = async (options) =>
+{
+    try
+    {
+        return await sendEmail(options);
+    } catch (error)
+    {
+        console.error('Email not sent:', error.message);
+        return false;
     }
 };

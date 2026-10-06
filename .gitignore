@@ -12,3 +12,6 @@ logs/
 
 # Environment variables
 .env 
+# Local env / Vercel link
+.env*
+.vercel

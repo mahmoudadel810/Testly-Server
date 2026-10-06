@@ -53,8 +53,6 @@ export const checkEnvironmentConfig = () =>
 {
     const requiredVars = [
         'MONGODB_URI',
-        'REDIS_URL',
-        'REDIS_HOST',
         'SIGNATURE'
     ];
 

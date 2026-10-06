@@ -358,7 +358,9 @@ class CacheManager
     async setUserProfile(userId, profileData)
     {
         const key = this.generateKey(this.keyPrefixes.userProfile, userId);
-        return await this.set(key, profileData, this.defaultTTL.userProfiles, 'user');
+        // Generic JSON: the 'user' schema would drop teacher fields (name, phone, ...).
+        // Callers must pass a profile without password/code.
+        return await this.set(key, profileData, this.defaultTTL.userProfiles);
     }
 
     // Attempt-specific methods

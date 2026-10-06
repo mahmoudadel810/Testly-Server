@@ -50,6 +50,9 @@ const teacherSchema = new mongoose.Schema({
         type: String,
         enum: ["teacher", "admin"],
         default: "teacher",
+    },
+    code: {
+        type: String, // password reset code
     }
 },
     {

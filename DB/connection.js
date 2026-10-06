@@ -1,30 +1,28 @@
 import mongoose from 'mongoose';
-import { AppError } from '../utils/errorHandling.js';
 import logger from '../utils/logger.js';
 
 
-// Serverless connection caching
-let cachedConnection = null;
+// Serverless connection caching: cache the connect PROMISE, not its result, so concurrent
+// cold-start requests all wait for the same connection instead of querying too early
+// (bufferCommands is false, so a query on a still-connecting connection throws).
+let connectionPromise = null;
 
 const connectDB = async () =>
 {
-  try
+  if (mongoose.connection.readyState === 1 && connectionPromise)
   {
-    if (cachedConnection && mongoose.connection.readyState === 1)
-    {
-      console.log('Using cached MongoDB connection');
-      return cachedConnection;
-    }
+    return connectionPromise;
+  }
 
-    if (!process.env.MONGODB_URI)
-    {
-      logger.error('MongoDB URI not provided');
-      throw new Error('MONGODB_URI environment variable not set');
-    }
+  if (!process.env.MONGODB_URI)
+  {
+    logger.error('MongoDB URI not provided');
+    throw new Error('MONGODB_URI environment variable not set');
+  }
 
-    cachedConnection = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+  if (!connectionPromise)
+  {
+    connectionPromise = mongoose.connect(process.env.MONGODB_URI, {
       serverSelectionTimeoutMS: 5000,
       maxPoolSize: 10,
       socketTimeoutMS: 45000,
@@ -35,16 +33,21 @@ const connectDB = async () =>
       },
       bufferCommands: false,
       autoIndex: false,
-    });
-
-    logger.info(`MongoDB Connected: ${cachedConnection.connection.host}`);
-    return cachedConnection;
-  } catch (error)
-  {
-    logger.error('MongoDB Connection Error:', error.message);
-    cachedConnection = null;
-    throw new Error(`Failed to connect to MongoDB: ${error.message}`);
+    })
+      .then((connection) =>
+      {
+        logger.info(`MongoDB Connected: ${connection.connection.host}`);
+        return connection;
+      })
+      .catch((error) =>
+      {
+        logger.error('MongoDB Connection Error:', error.message);
+        connectionPromise = null; // allow the next request to retry
+        throw new Error(`Failed to connect to MongoDB: ${error.message}`);
+      });
   }
+
+  return connectionPromise;
 };
 
 export default connectDB;

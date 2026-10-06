@@ -37,25 +37,23 @@ class RedisManager
                     servername: process.env.REDIS_HOST,
                     rejectUnauthorized: true
                 },
-                socket: {
-                    keepAlive: 5000, // Prevent ECONNRESET
-                    tls: true, // Explicit TLS declaration
-                    reconnectStrategy: (retries) =>
+                keepAlive: 5000, // Prevent ECONNRESET
+                // ioredis retry option (the old `socket.reconnectStrategy` was node-redis syntax and was ignored)
+                retryStrategy: (times) =>
+                {
+                    if (times > 3)
                     {
-                        if (retries > 3)
-                        {
-                            logger.error('Redis max retries reached, giving up after 3 retries');
-                            return null; // Stop retrying
-                        }
-                        return Math.min(retries * 1000, 3000); // Exponential backoff
+                        logger.error('Redis max retries reached, giving up after 3 retries');
+                        return null; // Stop retrying
                     }
+                    return Math.min(times * 1000, 3000);
                 },
-                connectTimeout: 10000,
+                connectTimeout: 5000,
                 commandTimeout: 5000,
                 maxRetriesPerRequest: 1,
-                // Don't retry forever - fail fast
-                lazyConnect: true,
-                retryDelayOnFailover: 1000
+                // Fail fast instead of queueing commands while disconnected
+                enableOfflineQueue: false,
+                lazyConnect: true
             });
 
             // When Redis is ready to use
@@ -169,19 +167,6 @@ class RedisManager
                 status: 'error',
                 message: error.message
             };
-        }
-    }
-
-    async get(key, fallbackFn)
-    {
-        try
-        {
-            const cached = await this.getFromRedis(key);
-            return cached || fallbackFn();
-        } catch (error)
-        {
-            logger.error('Cache failed, falling back to DB', error);
-            return fallbackFn();
         }
     }
 }

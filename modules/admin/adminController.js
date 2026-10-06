@@ -2,10 +2,11 @@ import Exam from "../../DB/models/exam.model.js";
 import Attempt from '../../DB/models/attempt.model.js';
 import User from '../../DB/models/user.model.js';
 import Teacher from "../../DB/models/teacher.model.js";
-import { sendEmail } from "../../services/sendEmail.js";
+import { trySendEmail } from "../../services/sendEmail.js";
 import { asyncHandler, AppError } from '../../utils/errorHandling.js';
 import logger from '../../utils/logger.js';
 import cacheManager from '../../utils/cache.js';
+import { ATTEMPT_GRACE_SECONDS } from '../attempt/attemptController.js';
 
 
 //TODO -  =============================Get All exams for admin===================
@@ -158,6 +159,24 @@ export const getExamById = asyncHandler(async (req, res, next) =>
 
 //===================UpdateExam============================
 
+// Admins manage every exam; a teacher only the exams they created or own
+const canManageExam = (user, exam) =>
+    user.role === 'admin' ||
+    [exam.createdBy, exam.teacherId].some(id => id && id.toString() === user._id.toString());
+
+// True when the incoming questions are exactly the stored ones (same ids, order and content)
+const sameQuestions = (current, incoming) =>
+    current.length === incoming.length &&
+    current.every((question, i) =>
+    {
+        const other = incoming[i] || {};
+        return String(question._id) === String(other._id) &&
+            question.text === String(other.text ?? '').trim() &&
+            question.correctAnswer === Number(other.correctAnswer) &&
+            question.points === Number(other.points ?? 1) &&
+            JSON.stringify([...question.options]) === JSON.stringify(other.options);
+    });
+
 export const updateExam = asyncHandler(async (req, res, next) =>
 {
     const examId = req.params.id;
@@ -168,9 +187,40 @@ export const updateExam = asyncHandler(async (req, res, next) =>
         return next(new AppError('Exam not found', 404));
     }
 
+    if (!canManageExam(req.user, exam))
+    {
+        return next(new AppError('You can only edit your own exams', 403));
+    }
+
+    // Ownership and identity are never taken from the request body
+    const { createdBy, teacherId, _id, __v, createdAt, updatedAt, ...update } = req.body;
+
+    if (Array.isArray(update.questions))
+    {
+        // Keep the _id of questions that already exist so submitted answers still match them
+        const existingIds = new Set(exam.questions.map(question => question._id.toString()));
+        update.questions = update.questions.map(({ _id: questionId, ...question }) =>
+            questionId && existingIds.has(String(questionId)) ? { _id: questionId, ...question } : question);
+
+        // Changing questions while a student is answering them would corrupt the scoring
+        if (!sameQuestions(exam.questions, update.questions))
+        {
+            const attemptInProgress = await Attempt.exists({
+                examId: exam._id,
+                isCompleted: false,
+                startTime: { $gt: new Date(Date.now() - (exam.duration * 60 + ATTEMPT_GRACE_SECONDS) * 1000) }
+            });
+
+            if (attemptInProgress)
+            {
+                return next(new AppError('Students are taking this exam right now. Questions can be changed once their attempts are finished.', 409));
+            }
+        }
+    }
+
     const updatedExam = await Exam.findByIdAndUpdate(
         examId,
-        req.body, // update with coming in body , FE takes it 
+        update,
         { new: true, runValidators: true }
     );
 
@@ -202,6 +252,11 @@ export const deleteExam = asyncHandler(async (req, res, next) =>
     if (!exam)
     {
         return next(new AppError('Exam not found', 404));
+    }
+
+    if (!canManageExam(req.user, exam))
+    {
+        return next(new AppError('You can only delete your own exams', 403));
     }
 
     // Delete all attempts associated with this exam
@@ -348,7 +403,7 @@ export const approveTeacher = asyncHandler(async (req, res, next) =>
     ]);
 
     // Send approval email
-    const approvalEmail = await sendEmail({
+    const approvalEmail = await trySendEmail({
         to: teacher.email,
         subject: 'Teacher Account Approved',
         message: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
@@ -385,7 +440,7 @@ export const rejectTeacher = asyncHandler(async (req, res, next) =>
     }
 
     // Send rejection email
-    const rejectionEmailSent = await sendEmail({
+    const rejectionEmailSent = await trySendEmail({
         to: teacher.email,
         subject: 'Teacher Application Status',
         message: `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">

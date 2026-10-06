@@ -57,6 +57,17 @@ export const getExams = asyncHandler(async (req, res, next) =>
 
 //==================getSingleExam with ID ====================================
 
+// Students must not receive the answer key; teachers and admins need it to edit exams
+const hideAnswersFor = (user, exam) =>
+{
+    if (['admin', 'teacher'].includes(user?.role)) return exam;
+    const plain = typeof exam.toObject === 'function' ? exam.toObject() : exam;
+    return {
+        ...plain,
+        questions: (plain.questions || []).map(({ correctAnswer, ...question }) => question)
+    };
+};
+
 export const getExam = asyncHandler(async (req, res, next) =>
 {
     const examId = req.params.id;
@@ -71,7 +82,7 @@ export const getExam = asyncHandler(async (req, res, next) =>
         logger.info('Exam retrieved successfully from cache', { examId });
         return res.status(200).json({
             success: true,
-            data: cachedExam,
+            data: hideAnswersFor(req.user, cachedExam),
             message: 'Exam retrieved successfully'
         });
     }
@@ -92,7 +103,7 @@ export const getExam = asyncHandler(async (req, res, next) =>
     logger.info('Exam retrieved successfully from database', { examId });
     res.status(200).json({
         success: true,
-        data: exam,
+        data: hideAnswersFor(req.user, exam),
         message: 'Exam retrieved successfully'
     });
 });
@@ -280,7 +291,8 @@ export const getExamsByTeacher = asyncHandler(async (req, res, next) =>
     })
         .populate('createdBy', 'username email role')
         .populate('teacherId', 'name email')
-        .select('title description duration passingScore createdAt questions')
+        // Public route used by students to browse: never include the answer key
+        .select('title description duration passingScore createdAt createdBy teacherId questions._id questions.text questions.options questions.points')
         .sort({ createdAt: -1 });
 
     // Process exams to handle cross-model references

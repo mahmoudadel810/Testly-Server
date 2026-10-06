@@ -1,7 +1,7 @@
 import winston from 'winston';
 import 'winston-daily-rotate-file';
 
-const isDeployment = !!process.env.DEPLOYMENT || process.env.NODE_ENV === 'production';
+const isDeployment = !!process.env.DEPLOYMENT || !!process.env.VERCEL || process.env.NODE_ENV === 'production';
 
 const transports = [
     new winston.transports.Console({

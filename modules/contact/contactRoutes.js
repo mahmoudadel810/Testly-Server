@@ -115,7 +115,7 @@ const router = express.Router();
  *         description: Server error
  */
 // Public route for contact form submission
-router.post('/submit', validation(contactValidation.createContactSchema),
+router.post('/submit', validation({ body: contactValidation.createContactSchema }),
     contactController.createContact
 );
 

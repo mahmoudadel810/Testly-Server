@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { protect } from '../../middelWares/auth.js';
 import { validation } from "../../middelWares/validation.js";
-import { signUpValidator, loginValidator, verifyReset } from "./authValidation.js";
+import { signUpValidator, teacherSignUpValidator, loginValidator, emailOnlyValidator, verifyReset } from "./authValidation.js";
 import * as authController from "./authController.js";
 import { authorize } from '../../middelWares/auth.js';
 const router = Router();
@@ -171,7 +171,7 @@ router.post('/signUp', validation(signUpValidator), authController.register);
  *         description: Error in teacher registration
  */
 // Add teacher registration route
-router.post('/teacher/signUp', authController.registerTeacher);
+router.post('/teacher/signUp', validation(teacherSignUpValidator), authController.registerTeacher);
 
 /**
  * @swagger
@@ -249,6 +249,45 @@ router.get('/teachers/confirmed', authController.getConfirmedTeachers);
  *                   example: User Already Confirmed
  */
 router.get('/confirmEmail/:token', authController.confirmEmail);
+
+/**
+ * @swagger
+ * /api/auth/resendConfirmation:
+ *   post:
+ *     summary: Resend the email confirmation link to an unconfirmed student account
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 description: The email the account was registered with
+ *             example:
+ *               email: john@example.com
+ *     responses:
+ *       200:
+ *         description: Generic confirmation (does not reveal whether the email exists). If the email service is unavailable the account is activated directly and the message says so.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: If an unconfirmed account exists for this email, a new confirmation link has been sent.
+ *       400:
+ *         description: Validation error
+ */
+router.post('/resendConfirmation', validation(emailOnlyValidator), authController.resendConfirmation);
 
 /**
  * @swagger
@@ -339,7 +378,7 @@ router.post('/signIn', validation(loginValidator), authController.logIn);
  *       500:
  *         description: Server error
  */
-router.post('/resetPassword', authController.resetPassword);
+router.post('/resetPassword', validation(emailOnlyValidator), authController.resetPassword);
 
 /**
  * @swagger
@@ -461,7 +500,7 @@ router.post('/logout', protect, authController.logOut);
  *       500:
  *         description: Server error
  */
-router.get('/user/:id', protect, authorize('admin', 'user'), authController.getUserById);
+router.get('/user/:id', protect, authorize('admin', 'student'), authController.getUserById);
 
 /**
  * @swagger

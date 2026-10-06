@@ -618,4 +618,42 @@ router.get('/teacher/attempts', protect, authorize('teacher'), attemptController
  */
 router.get('/teacher/exams/:examId/attempts', protect, authorize('teacher'), attemptController.getAttemptsByExam);
 
+/**
+ * @swagger
+ * /api/exam/teacher/attempts/{id}:
+ *   delete:
+ *     summary: Delete a student's attempt on one of the current teacher's exams
+ *     tags: [Teacher]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: The attempt ID
+ *     responses:
+ *       200:
+ *         description: Attempt deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Attempt deleted
+ *       401:
+ *         description: Not authorized
+ *       403:
+ *         description: Forbidden - Not a teacher
+ *       404:
+ *         description: Attempt not found or its exam is not owned by this teacher
+ */
+router.delete('/teacher/attempts/:id', protect, authorize('teacher'), attemptController.deleteTeacherAttempt);
+
 export default router;

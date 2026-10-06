@@ -1,6 +1,7 @@
 import redisManager from './redis.js';
 import logger from './logger.js';
 import { AppError } from './errorHandling.js';
+import rateLimit from 'express-rate-limit';
 
 class RedisRateLimiter
 {
@@ -13,6 +14,15 @@ class RedisRateLimiter
         this.skipSuccessfulRequests = options.skipSuccessfulRequests || false;
         this.skipFailedRequests = options.skipFailedRequests || false;
         this.message = options.message || 'Too many requests from this IP, please try again later';
+
+        // Per-instance in-memory limiter used while Redis is unavailable
+        this.memoryLimiter = rateLimit({
+            windowMs: this.windowMs,
+            limit: this.maxRequests,
+            standardHeaders: true,
+            legacyHeaders: false,
+            handler: (req, res, next) => next(new AppError(this.message, 429))
+        });
     }
 
     // Generate key for IP address
@@ -43,11 +53,10 @@ class RedisRateLimiter
     {
         return async (req, res, next) =>
         {
-            // Skip if Redis is not available - fallback to no rate limiting
+            // Redis not available - fall back to the in-memory limiter
             if (!redisManager.isReady())
             {
-                logger.warn('Redis not available, skipping rate limiting');
-                return next();
+                return this.memoryLimiter(req, res, next);
             }
 
             try

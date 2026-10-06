@@ -1,6 +1,6 @@
 import User from '../../DB/models/user.model.js';
 import jwt from 'jsonwebtoken';
-import { sendEmail } from '../../services/sendEmail.js';
+import { sendEmail, trySendEmail } from '../../services/sendEmail.js';
 import { compareFuncion, hashFunction } from "../../utils/generateHash.js";
 import { tokenFunction } from '../../utils/tokenFunction.js';
 import { nanoid } from 'nanoid';
@@ -15,6 +15,37 @@ import cacheManager from '../../utils/cache.js';
 
 
 
+// Confirmation links stay valid for 7 days
+const CONFIRMATION_TOKEN_TTL = 60 * 60 * 24 * 7;
+// Sign-in sessions last 24 hours (long enough to finish any exam)
+const LOGIN_TOKEN_TTL = 60 * 60 * 24;
+
+// Sends the confirmation email; returns false (never throws) when the email service is unavailable
+const sendConfirmationEmail = (user) =>
+{
+    const token = tokenFunction({
+        payload: { _id: user._id, email: user.email },
+        expiresIn: CONFIRMATION_TOKEN_TTL
+    });
+
+    // The component made by FE to confirm email after user click mail
+    const confirmationLink = `${process.env.FRONTEND_URL || 'https://testly-sand.vercel.app'}/confirm-email/${token}`;
+    return trySendEmail({
+        to: user.email,
+        subject: 'confirmationEmail',
+        message: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 20px auto; padding: 30px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h2 style="color: #007bff; text-align: center; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 1px solid #eee;">Confirm Your Email Address</h2>
+        <p style="font-size: 16px; line-height: 1.6; color: #333; margin-bottom: 15px;">Hi ${user.username},</p>
+        <p style="font-size: 16px; line-height: 1.6; color: #333; margin-bottom: 25px;">Thank you for registering with Testly! Please click the button below to verify your email address:</p>
+               <div style="text-align: center; margin: 30px 0;">
+           <a href="${confirmationLink}" style="background-color: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; font-size: 17px; transition: background-color 0.3s ease;">Confirm Email</a>
+             </div>
+        <p style="font-size: 14px; color: #777; margin-top: 30px; text-align: center;">If you didn't create an account, you can safely ignore this email.</p>
+        <p style="font-size: 12px; color: #aaa; margin-top: 25px; text-align: center;">&copy; ${new Date().getFullYear()} Testly. All rights reserved.</p>
+      </div>`
+    });
+};
+
 //============================== Register user=================================
 export const register = asyncHandler(async (req, res, next) =>
 {
@@ -24,9 +55,22 @@ export const register = asyncHandler(async (req, res, next) =>
     if (email)
     {
         const user = await User.findOne({ email });
-        if (user)
+        if (user && user.isConfirmed)
         {
             return next(new AppError('A user with this email address already exists', 400));
+        }
+
+        // One email = one account: a teacher account owns this address
+        if (await Teacher.exists({ email }))
+        {
+            return next(new AppError('This email address is already registered as a teacher account', 400));
+        }
+
+        // An unconfirmed registration (e.g. expired link) is replaced by the new one
+        if (user)
+        {
+            await User.deleteOne({ _id: user._id, isConfirmed: false });
+            logger.info('Replacing unconfirmed registration', { userId: user._id });
         }
     }
 
@@ -39,29 +83,14 @@ export const register = asyncHandler(async (req, res, next) =>
         password: hashedPass,
     });
 
-    const token = tokenFunction({ payload: { _id: newUser._id, email: newUser.email } });
-    // console.log("token", token);
+    const emailed = await sendConfirmationEmail(newUser);
 
-    // The component made by FE to confirm email after user click mail
-    const confirmationLink = `${process.env.FRONTEND_URL || 'https://testly-sand.vercel.app'}/confirm-email/${token}`;
-    const emailed = await sendEmail({
-        to: newUser.email,
-        subject: 'confirmationEmail',
-        message: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 20px auto; padding: 30px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <h2 style="color: #007bff; text-align: center; margin-bottom: 25px; padding-bottom: 10px; border-bottom: 1px solid #eee;">Confirm Your Email Address</h2>
-        <p style="font-size: 16px; line-height: 1.6; color: #333; margin-bottom: 15px;">Hi ${username},</p>
-        <p style="font-size: 16px; line-height: 1.6; color: #333; margin-bottom: 25px;">Thank you for registering with Testly! Please click the button below to verify your email address:</p>
-               <div style="text-align: center; margin: 30px 0;">
-           <a href="${confirmationLink}" style="background-color: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; font-size: 17px; transition: background-color 0.3s ease;">Confirm Email</a>
-             </div>
-        <p style="font-size: 14px; color: #777; margin-top: 30px; text-align: center;">If you didn't create an account, you can safely ignore this email.</p>
-        <p style="font-size: 12px; color: #aaa; margin-top: 25px; text-align: center;">&copy; ${new Date().getFullYear()} Testly. All rights reserved.</p>
-      </div>`
-    });
-
+    // If the confirmation email cannot be delivered, activate the account directly
+    // instead of leaving the user unable to ever sign in.
     if (!emailed)
     {
-        return next(new AppError('Registration failed - Unable to send confirmation email. Please try again later.', 503));
+        newUser.isConfirmed = true;
+        logger.warn('Confirmation email not sent; account activated without email confirmation', { userId: newUser._id });
     }
 
     await newUser.save();
@@ -71,8 +100,40 @@ export const register = asyncHandler(async (req, res, next) =>
 
     res.status(201).json({
         success: true,
-        message: 'User registered successfully! Please check your email to confirm your account.'
+        message: emailed
+            ? 'User registered successfully! Please check your email to confirm your account.'
+            : 'User registered successfully! Your account is active, you can sign in now.'
     });
+});
+
+//============================== Resend confirmation email =================================
+export const resendConfirmation = asyncHandler(async (req, res, next) =>
+{
+    const { email } = req.body;
+    const genericMessage = 'If an unconfirmed account exists for this email, a new confirmation link has been sent.';
+
+    const user = await User.findOne({ email, isConfirmed: false });
+    if (!user)
+    {
+        // Same answer for unknown and already-confirmed emails
+        return res.status(200).json({ success: true, message: genericMessage });
+    }
+
+    const emailed = await sendConfirmationEmail(user);
+
+    // Same policy as register: without a working email service, activate the account directly
+    if (!emailed)
+    {
+        await User.updateOne({ _id: user._id }, { $set: { isConfirmed: true } });
+        logger.warn('Confirmation email not resent; account activated without email confirmation', { userId: user._id });
+        return res.status(200).json({
+            success: true,
+            message: 'The confirmation email could not be sent, so your account has been activated. You can sign in now.'
+        });
+    }
+
+    logger.info('Confirmation email resent', { userId: user._id });
+    res.status(200).json({ success: true, message: genericMessage });
 });
 
 //================= Teacher registration endpoint===============
@@ -87,6 +148,12 @@ export const registerTeacher = asyncHandler(async (req, res, next) =>
         if (existingTeacher)
         {
             return next(new AppError('A teacher with this email address already exists', 400));
+        }
+
+        // One email = one account: a student/admin account owns this address
+        if (await User.exists({ email }))
+        {
+            return next(new AppError('This email address is already registered as a student account', 400));
         }
     }
 
@@ -212,26 +279,12 @@ export const logIn = asyncHandler(async (req, res, next) =>
         return next(new AppError('Server configuration error - Authentication service unavailable', 500));
     }
 
-    // Try to get cached user first - Redis caching addition
-    const userCacheKey = `user:login:${email}`;
-    let userCheck = await cacheManager.get(userCacheKey);
-
-    if (!userCheck)
-    {
-        // First check if it's a regular user
-        userCheck = await User.findOne({ email, isConfirmed: true });
-
-        if (userCheck)
-        {
-            // Cache the user data for 15 minutes
-            await cacheManager.setUser(userCheck._id.toString(), userCheck);
-        }
-    }
+    // First check if it's a regular user (always read from the database: the password hash is never cached)
+    const userCheck = await User.findOne({ email, isConfirmed: true });
 
     if (userCheck)
     {
         const match = compareFuncion({ payload: password, referenceData: userCheck.password });
-        console.log("password match result:", match);
 
         if (!match)
         {
@@ -244,7 +297,8 @@ export const logIn = asyncHandler(async (req, res, next) =>
                 email: userCheck.email,
                 username: userCheck.username,
                 role: userCheck.role
-            }
+            },
+            expiresIn: LOGIN_TOKEN_TTL
         });
 
         if (!token)
@@ -310,7 +364,8 @@ export const logIn = asyncHandler(async (req, res, next) =>
                 email: teacherCheck.email,
                 name: teacherCheck.name,
                 role: teacherCheck.role
-            }
+            },
+            expiresIn: LOGIN_TOKEN_TTL
         });
 
         if (!token)
@@ -368,10 +423,12 @@ export const getMe = asyncHandler(async (req, res, next) =>
 
             if (cachedUser)
             {
+                // Never return secrets, even from an entry cached by an older version
+                const { password, code, ...safeProfile } = cachedUser;
                 logger.debug('User profile retrieved from cache', { userId });
                 return res.status(200).json({
                     success: true,
-                    data: cachedUser,
+                    data: safeProfile,
                     message: 'User information retrieved successfully'
                 });
             }
@@ -382,7 +439,10 @@ export const getMe = asyncHandler(async (req, res, next) =>
         }
     }
 
-    const user = await User.findById(userId);
+    // Teachers live in their own collection; protect() already loaded req.user from the right model
+    const isTeacher = req.user.role === 'teacher' || req.user.constructor?.modelName === 'Teacher';
+    const UserModel = isTeacher ? Teacher : User;
+    const user = await UserModel.findById(userId).select('-password -code');
 
     if (!user)
     {
@@ -436,13 +496,17 @@ export const resetPassword = asyncHandler(async (req, res, next) =>
 {
     const { email } = req.body;
 
-    const user = await User.findOne({ email });
+    // Students/admins and teachers can both reset their password
+    const user = await User.findOne({ email }) || await Teacher.findOne({ email });
     if (!user)
     {
         return next(new AppError('No user found with this email address', 404));
     }
 
     const code = nanoid(6);
+
+    // Store the code before emailing it, so a code that reaches the user always works
+    await user.constructor.updateOne({ _id: user._id }, { $set: { code } });
 
     const emailed = await sendEmail({
         to: email,
@@ -464,16 +528,6 @@ export const resetPassword = asyncHandler(async (req, res, next) =>
         return next(new AppError('Failed to send password reset email. Please try again later.', 503));
     }
 
-    try
-    {
-        user.code = code;
-        await user.save();
-    } catch (saveError)
-    {
-        console.log("Failed to save code to user, but email was sent:", saveError);
-        // Continue execution as email was sent successfully
-    }
-
     res.status(200).json({
         success: true,
         message: 'Password reset code sent successfully to your email.'
@@ -486,16 +540,16 @@ export const verifyReset = asyncHandler(async (req, res, next) =>
 {
     const { code, newPassword, confirmNewPassword } = req.body;
 
-    // Find user by code
-    const user = await User.findOne({ code });
+    // Find user (student/admin or teacher) by code
+    const user = await User.findOne({ code }) || await Teacher.findOne({ code });
     if (!user)
     {
         return next(new AppError('Invalid or expired reset code', 400));
     }
 
-    // Hash new password and update user
+    // Hash new password and update user in its own collection
     const hashedPassword = hashFunction({ payload: newPassword });
-    await User.findOneAndUpdate(
+    await user.constructor.findOneAndUpdate(
         { _id: user._id },
         {
             $set: { password: hashedPassword, code: nanoid() } // Invalidate code after use
@@ -515,7 +569,7 @@ export const logOut = asyncHandler(async (req, res, next) =>
 {
     // Get user from the authenticated request
     const user = req.user; // Use the user object provided by the protect middleware
-    const token = req.headers.authorization?.split(' ')[1];
+    const token = req.headers.authorization?.split(process.env.BAREAR)[1];
 
     // The protect middleware should handle the case where req.user is not found,
     // but adding a check here for safety, although it should theoretically not be reached.

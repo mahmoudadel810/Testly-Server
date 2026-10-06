@@ -76,13 +76,6 @@ export const errorHandler = (err, req, res, next) =>
         statusCode = 400;
     }
 
-    // Email errors
-    if (err.message && err.message.includes('ENOTFOUND'))
-    {
-        message = 'Email service unavailable';
-        statusCode = 503;
-    }
-
     // Log error using Winston
     logger.error(`${statusCode} - ${message}`, { stack: err.stack });
 

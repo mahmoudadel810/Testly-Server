@@ -19,6 +19,8 @@ config({ path: path.resolve('config/.env') });
 //==============================================================
 const port = process.env.PORT || 3000;
 const app = express();
+// Behind Vercel's proxy: use X-Forwarded-For so rate limiting keys on the real client IP
+app.set('trust proxy', 1);
 const BASE_URL = process.env.BASE_URL || 'api';
 
 //=============================================================
@@ -44,6 +46,10 @@ const limiter = createRateLimiter({
 });
 
 //=============================================================
+// CORS first, so even a failed service initialisation returns a readable error to the browser
+app.use(cors());
+
+//=============================================================
 // Vercel serverless connection handling
 // Track if services are initialized
 let servicesInitialized = false;
@@ -54,8 +60,8 @@ app.use(async (req, res, next) =>
 {
   try
   {
-    // Skip if already initialized or not in Vercel production
-    if (servicesInitialized || process.env.VERCEL_ENV !== 'production')
+    // Skip if already initialized or not running on Vercel (locally startServer() connects)
+    if (servicesInitialized || !process.env.VERCEL)
     {
       return next();
     }
@@ -74,7 +80,6 @@ app.use(async (req, res, next) =>
 });
 
 //=============================================================
-app.use(cors());
 app.use(json());
 app.use(compression());
 app.use(helmet());
@@ -166,8 +171,8 @@ const startServer = async () =>
 // Vercel requires this export
 const vercelHandler = app;
 
-// Start server in all environments except Vercel production
-if (process.env.VERCEL_ENV !== 'production')
+// Start a listening server everywhere except on Vercel (production and preview are serverless)
+if (!process.env.VERCEL)
 {
   startServer();
 }

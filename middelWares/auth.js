@@ -7,7 +7,6 @@ import { asyncHandler, AppError } from '../utils/errorHandling.js';
 export const protect = asyncHandler(async (req, res, next) =>
 {
     let token;
-    console.log("Auth header:", req.headers.authorization);
 
     if (
         req.headers.authorization &&
@@ -15,7 +14,6 @@ export const protect = asyncHandler(async (req, res, next) =>
     )
     {
         token = req.headers.authorization.split(process.env.BAREAR)[1];
-        console.log("Extracted token:", token ? token.substring(0, 10) + "..." : "null");
     }
 
     if (!token)
@@ -25,7 +23,6 @@ export const protect = asyncHandler(async (req, res, next) =>
 
     // Verify token decode it make sure yr name and mail in the token
     const decoded = jwt.verify(token, process.env.SIGNATURE);
-    console.log("Token verified successfully:", decoded);
 
     let user;
 

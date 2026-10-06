@@ -4,7 +4,28 @@ import { asyncHandler, AppError } from '../../utils/errorHandling.js';
 import logger from '../../utils/logger.js';
 import cacheManager from '../../utils/cache.js';
 
+// Extra time after the exam duration for network latency / auto-submit at 00:00
+export const ATTEMPT_GRACE_SECONDS = 60;
 
+const attemptDeadline = (attempt, exam) =>
+    new Date(new Date(attempt.startTime).getTime() + (exam.duration * 60 + ATTEMPT_GRACE_SECONDS) * 1000);
+
+// An attempt whose time ran out is closed with the answers it has (none) so the
+// student is not stuck with an attempt that can never be submitted.
+const closeExpiredAttempt = async (attempt) =>
+{
+    attempt.answers = [];
+    attempt.score = 0;
+    attempt.passed = false;
+    attempt.endTime = new Date();
+    attempt.isCompleted = true;
+    await attempt.save();
+};
+
+const invalidateAttemptCaches = (attempt) => Promise.all([
+    cacheManager.del(`attempt_status:${attempt.userId}:${attempt.examId}`),
+    cacheManager.del('admin:all_attempts')
+]);
 
 
 //========================= Start a new exam attempt===================================
@@ -26,6 +47,13 @@ export const startExam = asyncHandler(async (req, res, next) =>
         userId,
         isCompleted: false
     });
+
+    if (ongoingAttempt && Date.now() > attemptDeadline(ongoingAttempt, exam).getTime())
+    {
+        await closeExpiredAttempt(ongoingAttempt);
+        await invalidateAttemptCaches(ongoingAttempt);
+        return next(new AppError('The time limit for this exam has passed', 400));
+    }
 
     if (ongoingAttempt)
     {
@@ -60,6 +88,8 @@ export const startExam = asyncHandler(async (req, res, next) =>
         startTime: new Date()
     });
 
+    await invalidateAttemptCaches(attempt);
+
     // Log successful start of exam attempt
     logger.info('Exam attempt started successfully', { userId: userId, examId: examId, attemptId: attempt._id });
     res.status(201).json({
@@ -82,6 +112,11 @@ export const submitExam = asyncHandler(async (req, res, next) =>
     const { attemptId, answers } = req.body;
     const userId = req.user._id;
 
+    if (!Array.isArray(answers))
+    {
+        return next(new AppError('answers must be an array of { questionId, selectedOption }', 400));
+    }
+
     // Find the attempt first 
     const attempt = await Attempt.findOne({
         _id: attemptId,
@@ -101,13 +136,30 @@ export const submitExam = asyncHandler(async (req, res, next) =>
         return next(new AppError('Associated exam not found', 404));
     }
 
+    // Reject (and close) submissions that arrive after duration + grace
+    if (Date.now() > attemptDeadline(attempt, exam).getTime())
+    {
+        await closeExpiredAttempt(attempt);
+        await invalidateAttemptCaches(attempt);
+        return next(new AppError('The time limit for this exam has passed; the attempt was closed without a score', 400));
+    }
+
     // Process answers and calculate exam score 
     let score = 0; // initial 
     const processedAnswers = [];
+    const answeredQuestions = new Set();
 
     // Process each answer
     for (const answer of answers)
     {
+        // Each question counts once, whatever the client sends
+        const questionKey = String(answer?.questionId);
+        if (answeredQuestions.has(questionKey))
+        {
+            continue;
+        }
+        answeredQuestions.add(questionKey);
+
         const question = exam.questions.id(answer.questionId);
 
         // Skip if question answer not found
@@ -116,7 +168,9 @@ export const submitExam = asyncHandler(async (req, res, next) =>
             console.log(`Question answer with ID ${answer.questionId} not found in exam , NO Answer Provided `);
             continue;
         }
-        const isCorrect = question.correctAnswer === answer.selectedOption;
+        // Unanswered or malformed choices are stored as -1 (wrong)
+        const selectedOption = Number.isInteger(Number(answer.selectedOption)) ? Number(answer.selectedOption) : -1;
+        const isCorrect = question.correctAnswer === selectedOption;
 
         if (isCorrect)
         {
@@ -124,8 +178,8 @@ export const submitExam = asyncHandler(async (req, res, next) =>
         }
 
         processedAnswers.push({ //push to answers array 
-            questionId: answer.questionId,
-            selectedOption: answer.selectedOption,
+            questionId: question._id,
+            selectedOption,
             isCorrect,
             points: isCorrect ? question.points : 0
         });
@@ -144,18 +198,8 @@ export const submitExam = asyncHandler(async (req, res, next) =>
 
     await attempt.save();
 
-    // Invalidate the admin attempts cache to ensure admin dashboard shows the latest results
-    if (cacheManager && typeof cacheManager.del === 'function')
-    {
-        try
-        {
-            await cacheManager.del('admin:all_attempts');
-            logger.debug('Admin attempts cache invalidated after new submission');
-        } catch (error)
-        {
-            logger.warn('Failed to invalidate admin attempts cache', { error: error.message });
-        }
-    }
+    // Invalidate the attempt-status and admin attempts caches so dashboards show the latest results
+    await invalidateAttemptCaches(attempt);
 
     // Log successful submission of exam
     logger.info('Exam submitted successfully', { userId: userId, examId: attempt.examId, attemptId: attempt._id });
@@ -269,5 +313,38 @@ export const getAttemptsByExam = asyncHandler(async (req, res, next) =>
         success: true,
         data: attempts,
         message: 'Exam attempts retrieved successfully'
+    });
+});
+
+//======================= Delete an attempt (teacher) =============================
+export const deleteTeacherAttempt = asyncHandler(async (req, res, next) =>
+{
+    const teacherId = req.user._id;
+    const attempt = await Attempt.findById(req.params.id);
+
+    // Only attempts on the teacher's own exams; anything else looks like "not found"
+    const ownsExam = attempt && await Exam.exists({
+        _id: attempt.examId,
+        $or: [{ createdBy: teacherId }, { teacherId }]
+    });
+
+    if (!ownsExam)
+    {
+        return next(new AppError('Attempt not found', 404));
+    }
+
+    await attempt.deleteOne();
+
+    await Promise.all([
+        invalidateAttemptCaches(attempt),
+        cacheManager.del(`attempt:${attempt._id}`),
+        cacheManager.invalidateUser(attempt.userId.toString()),
+        cacheManager.invalidateTeacherData(teacherId.toString())
+    ]);
+
+    logger.info('Attempt deleted by teacher', { teacherId, attemptId: attempt._id, examId: attempt.examId });
+    res.status(200).json({
+        success: true,
+        message: 'Attempt deleted'
     });
 });
